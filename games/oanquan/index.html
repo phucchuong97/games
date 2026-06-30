@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ô Ăn Quan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Ô ĂN QUAN</h1>
+    <p class="subtitle">Traditional Vietnamese mandarin square game · 2 players</p>
+  </header>
+
+  <main>
+    <!-- Player 1 panel -->
+    <section class="player-panel" id="panel-1">
+      <h2>Player 1</h2>
+      <div class="score">Score: <b id="score-1">0</b></div>
+      <div class="owns">Owns pits 0–4 (bottom)</div>
+    </section>
+
+    <!-- Board + controls -->
+    <section class="center">
+      <div id="status" class="status">&nbsp;</div>
+
+      <div class="board-wrap">
+        <div id="board" class="board"></div>
+      </div>
+
+      <div class="turn-bar">
+        <span class="turn-label">Current Turn</span>
+        <span id="turn-player" class="turn-player">Player 1</span>
+      </div>
+
+      <div class="direction-bar">
+        <span>Direction:</span>
+        <button id="dir-ccw" disabled>↺ Counter-clockwise</button>
+        <button id="dir-cw" disabled>Clockwise ↻</button>
+      </div>
+
+      <div class="controls">
+        <button id="btn-new" class="primary">New Game</button>
+        <button id="btn-undo" disabled>Undo</button>
+        <button id="btn-anim">Animation: On</button>
+        <button id="btn-help">Help</button>
+      </div>
+    </section>
+
+    <!-- Player 2 panel -->
+    <section class="player-panel" id="panel-2">
+      <h2>Player 2</h2>
+      <div class="score">Score: <b id="score-2">0</b></div>
+      <div class="owns">Owns pits 5–9 (top)</div>
+    </section>
+
+    <!-- Move history -->
+    <section class="history-panel">
+      <h2>Move History</h2>
+      <div id="history-list" class="history-list"></div>
+    </section>
+  </main>
+
+  <!-- Game-over overlay -->
+  <div id="overlay" class="modal">
+    <div class="modal-box">
+      <h2 id="overlay-title">Game Over</h2>
+      <p id="overlay-detail"></p>
+      <button id="overlay-close" class="primary">Close</button>
+    </div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-modal" class="modal">
+    <div class="modal-box help">
+      <h2>How to play Ô Ăn Quan</h2>
+      <ol>
+        <li>Each small pit starts with 5 citizen stones; each big <b>Quan</b> pit holds 1 quan stone (worth 10).</li>
+        <li>On your turn, click one of <b>your five pits</b> that has stones, then pick a direction.</li>
+        <li>Stones are sown one-by-one into following pits around the board.</li>
+        <li>If the pit after your last stone has stones, you scoop it up and keep sowing.</li>
+        <li>If that pit is empty and the next one has stones, you <b>capture</b> those stones (and any beyond, while the empty/full pattern continues). Capturing a Quan pit scores 10.</li>
+        <li>If two empties appear in a row, your turn ends.</li>
+        <li>If all your pits are empty at the start of your turn, you spend 5 points to refill them. If you can't, you lose.</li>
+        <li>When both Quan stones are captured, the game ends. Final score = captured points + stones left on your side. Highest wins.</li>
+      </ol>
+      <button id="help-close" class="primary">Got it</button>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
