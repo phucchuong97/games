@@ -23,38 +23,67 @@
   #scoreboard { display: flex; gap: 32px; font-size: 18px; }
   #scoreboard b { color: #4ade80; }
   #stage { position: relative; }
+  /* 4×84 tiles + 3×12 gaps + 2×12 padding = 396 */
   #grid {
+    position: relative;
+    width: 396px;
+    height: 396px;
     background: #16213e;
     border: 2px solid #0f3460;
     border-radius: 10px;
-    padding: 12px;
-    display: grid;
-    grid-template-columns: repeat(4, 84px);
-    grid-template-rows: repeat(4, 84px);
-    gap: 12px;
     touch-action: none;
   }
-  .tile {
+  .bg-cell {
+    position: absolute;
+    width: 84px;
+    height: 84px;
     border-radius: 8px;
     background: #0f2a4d;
+  }
+  .tile {
+    position: absolute;
+    width: 84px;
+    height: 84px;
+    /* slide animation */
+    transition: transform 110ms ease-in-out;
+    will-change: transform;
+  }
+  .tile-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 32px;
     font-weight: bold;
-    color: #16213e;
+    background: #eee4da;
+    color: #5b5247;
   }
-  .tile[data-v="2"]    { background: #eee4da; color: #5b5247; }
-  .tile[data-v="4"]    { background: #ede0c8; color: #5b5247; }
-  .tile[data-v="8"]    { background: #f2b179; }
-  .tile[data-v="16"]   { background: #f59563; }
-  .tile[data-v="32"]   { background: #f67c5f; }
-  .tile[data-v="64"]   { background: #f65e3b; color: #fff; }
-  .tile[data-v="128"]  { background: #edcf72; font-size: 28px; }
-  .tile[data-v="256"]  { background: #edcc61; font-size: 28px; }
-  .tile[data-v="512"]  { background: #edc850; font-size: 28px; }
-  .tile[data-v="1024"] { background: #edc53f; font-size: 22px; color: #fff; }
-  .tile[data-v="2048"] { background: #edc22e; font-size: 22px; color: #fff; }
+  .tile-inner[data-v="2"]    { background: #eee4da; color: #5b5247; }
+  .tile-inner[data-v="4"]    { background: #ede0c8; color: #5b5247; }
+  .tile-inner[data-v="8"]    { background: #f2b179; color: #fff; }
+  .tile-inner[data-v="16"]   { background: #f59563; color: #fff; }
+  .tile-inner[data-v="32"]   { background: #f67c5f; color: #fff; }
+  .tile-inner[data-v="64"]   { background: #f65e3b; color: #fff; }
+  .tile-inner[data-v="128"]  { background: #edcf72; font-size: 28px; }
+  .tile-inner[data-v="256"]  { background: #edcc61; font-size: 28px; }
+  .tile-inner[data-v="512"]  { background: #edc850; font-size: 28px; }
+  .tile-inner[data-v="1024"] { background: #edc53f; font-size: 22px; color: #fff; }
+  .tile-inner[data-v="2048"] { background: #edc22e; font-size: 22px; color: #fff; }
+  /* spawn + merge animations live on the inner element so they don't
+     clash with the transform-based slide on the outer .tile */
+  .tile.new .tile-inner { animation: appear 140ms ease; }
+  .tile.merged .tile-inner { animation: pop 160ms ease; }
+  @keyframes appear {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
   #message {
     position: absolute;
     inset: 0;
@@ -107,115 +136,177 @@
   const actionBtn = document.getElementById("action");
 
   const SIZE = 4;
-  let board, score, best, started, over, won, keepPlaying;
+  const PAD = 12, CELL = 84, GAP = 12, STEP = CELL + GAP; // pixel geometry
+  const MOVE_MS = 110;                                    // matches CSS transition
+  // move directions
+  const VEC = [
+    { dr: 0, dc: -1 }, // 0 left
+    { dr: -1, dc: 0 }, // 1 up
+    { dr: 0, dc: 1 },  // 2 right
+    { dr: 1, dc: 0 },  // 3 down
+  ];
+
+  let grid;        // SIZE×SIZE of tile objects or null
+  let score, best, started, over, won, keepPlaying, animating;
 
   best = Number(localStorage.getItem("best2048") || 0);
   bestEl.textContent = best;
 
-  // build the 16 tile cells once
-  const cells = [];
-  for (let i = 0; i < SIZE * SIZE; i++) {
-    const t = document.createElement("div");
-    t.className = "tile";
-    gridEl.appendChild(t);
-    cells.push(t);
+  // background slots
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const bg = document.createElement("div");
+      bg.className = "bg-cell";
+      bg.style.left = (PAD + c * STEP) + "px";
+      bg.style.top = (PAD + r * STEP) + "px";
+      gridEl.appendChild(bg);
+    }
+  }
+
+  function xy(r, c) {
+    return `translate(${PAD + c * STEP}px, ${PAD + r * STEP}px)`;
+  }
+
+  function makeTile(r, c, value, isNew) {
+    const el = document.createElement("div");
+    el.className = "tile" + (isNew ? " new" : "");
+    const inner = document.createElement("div");
+    inner.className = "tile-inner";
+    el.appendChild(inner);
+    el.style.transform = xy(r, c);
+    gridEl.appendChild(el);
+    const tile = { value, el, inner, merged: false };
+    setValue(tile, value);
+    return tile;
+  }
+
+  function setValue(tile, v) {
+    tile.value = v;
+    tile.inner.textContent = v;
+    tile.inner.dataset.v = v;
+  }
+
+  function moveTileTo(tile, r, c) {
+    tile.el.style.transform = xy(r, c);
+  }
+
+  function popMerge(tile) {
+    tile.el.classList.remove("merged");
+    void tile.el.offsetWidth; // restart the animation
+    tile.el.classList.add("merged");
   }
 
   function init() {
-    board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    // clear any existing tile elements
+    gridEl.querySelectorAll(".tile").forEach(el => el.remove());
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
     score = 0;
     over = false;
     won = false;
     keepPlaying = false;
+    animating = false;
     scoreEl.textContent = score;
-    addRandom();
-    addRandom();
-    render();
+    spawnRandom();
+    spawnRandom();
   }
 
-  function addRandom() {
+  function spawnRandom() {
     const empty = [];
     for (let r = 0; r < SIZE; r++)
       for (let c = 0; c < SIZE; c++)
-        if (board[r][c] === 0) empty.push({ r, c });
+        if (!grid[r][c]) empty.push({ r, c });
     if (!empty.length) return;
     const { r, c } = empty[Math.floor(Math.random() * empty.length)];
-    board[r][c] = Math.random() < 0.9 ? 2 : 4;
+    grid[r][c] = makeTile(r, c, Math.random() < 0.9 ? 2 : 4, true);
   }
 
-  function render() {
-    for (let r = 0; r < SIZE; r++) {
-      for (let c = 0; c < SIZE; c++) {
-        const v = board[r][c];
-        const cell = cells[r * SIZE + c];
-        cell.textContent = v || "";
-        cell.dataset.v = v || "";
-      }
-    }
+  function traversal(dir) {
+    let rows = [0, 1, 2, 3], cols = [0, 1, 2, 3];
+    if (dir === 2) cols = [3, 2, 1, 0]; // right → start from right edge
+    if (dir === 3) rows = [3, 2, 1, 0]; // down → start from bottom
+    return { rows, cols };
   }
 
-  // collapse one row to the left, return {row, gained, moved}
-  function slide(row) {
-    const nums = row.filter(v => v !== 0);
-    let gained = 0;
-    for (let i = 0; i < nums.length - 1; i++) {
-      if (nums[i] === nums[i + 1]) {
-        nums[i] *= 2;
-        gained += nums[i];
-        if (nums[i] === 2048) won = true;
-        nums.splice(i + 1, 1);
-      }
-    }
-    while (nums.length < SIZE) nums.push(0);
-    const moved = nums.some((v, i) => v !== row[i]);
-    return { row: nums, gained, moved };
-  }
+  const inBounds = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
 
-  // rotate clockwise
-  function rotate(b) {
-    const n = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
-    for (let r = 0; r < SIZE; r++)
-      for (let c = 0; c < SIZE; c++)
-        n[c][SIZE - 1 - r] = b[r][c];
-    return n;
-  }
-
-  // dir: 0 left, 1 up, 2 right, 3 down
   function move(dir) {
-    if (!started || over) return;
+    if (!started || over || animating) return;
 
-    // rotate so the move direction becomes "left", slide, then rotate back
-    for (let i = 0; i < dir; i++) board = rotate(board);
+    const vec = VEC[dir];
+    const { rows, cols } = traversal(dir);
+    // reset per-move merge flags
+    for (const row of grid) for (const t of row) if (t) t.merged = false;
+
     let moved = false;
-    for (let r = 0; r < SIZE; r++) {
-      const res = slide(board[r]);
-      board[r] = res.row;
-      score += res.gained;
-      if (res.moved) moved = true;
+    const merges = []; // {keep, remove, value}
+
+    for (const r of rows) {
+      for (const c of cols) {
+        let tile = grid[r][c];
+        if (!tile) continue;
+        grid[r][c] = null;
+
+        // slide as far as possible
+        let nr = r, nc = c;
+        while (true) {
+          const tr = nr + vec.dr, tc = nc + vec.dc;
+          if (!inBounds(tr, tc)) break;
+          const occupant = grid[tr][tc];
+          if (occupant === null) { nr = tr; nc = tc; continue; }
+          if (occupant.value === tile.value && !occupant.merged) {
+            // merge into the occupant
+            nr = tr; nc = tc;
+            occupant.merged = true;
+            const newVal = tile.value * 2;
+            merges.push({ keep: occupant, remove: tile, value: newVal });
+            score += newVal;
+            if (newVal === 2048) won = true;
+            moveTileTo(tile, nr, nc); // slide onto occupant, removed after anim
+            moved = true;
+            tile = null;
+          }
+          break;
+        }
+
+        if (tile) {
+          grid[nr][nc] = tile;
+          if (nr !== r || nc !== c) { moveTileTo(tile, nr, nc); moved = true; }
+        }
+      }
     }
-    for (let i = 0; i < (4 - dir) % 4; i++) board = rotate(board);
 
     if (!moved) return;
 
-    addRandom();
-    scoreEl.textContent = score;
-    if (score > best) {
-      best = score;
-      bestEl.textContent = best;
-      localStorage.setItem("best2048", best);
-    }
-    render();
+    animating = true;
+    setTimeout(() => {
+      // finalize merges: bump value, pop, drop the absorbed tile
+      for (const m of merges) {
+        setValue(m.keep, m.value);
+        popMerge(m.keep);
+        m.remove.el.remove();
+      }
+      spawnRandom();
 
-    if (won && !keepPlaying) return showMessage("🎉 You reached 2048!", "Keep Going");
-    if (isStuck()) return showMessage("Game Over — Score: " + score, "Try Again");
+      scoreEl.textContent = score;
+      if (score > best) {
+        best = score;
+        bestEl.textContent = best;
+        localStorage.setItem("best2048", best);
+      }
+      animating = false;
+
+      if (won && !keepPlaying) return showMessage("🎉 You reached 2048!", "Keep Going");
+      if (isStuck()) return showMessage("Game Over — Score: " + score, "Try Again");
+    }, MOVE_MS);
   }
 
   function isStuck() {
     for (let r = 0; r < SIZE; r++)
       for (let c = 0; c < SIZE; c++) {
-        if (board[r][c] === 0) return false;
-        if (c < SIZE - 1 && board[r][c] === board[r][c + 1]) return false;
-        if (r < SIZE - 1 && board[r][c] === board[r + 1][c]) return false;
+        const t = grid[r][c];
+        if (!t) return false;
+        if (c < SIZE - 1 && grid[r][c + 1] && grid[r][c + 1].value === t.value) return false;
+        if (r < SIZE - 1 && grid[r + 1][c] && grid[r + 1][c].value === t.value) return false;
       }
     return true;
   }
@@ -231,7 +322,6 @@
   actionBtn.addEventListener("click", () => {
     messageEl.classList.remove("show");
     if (actionBtn.textContent === "Keep Going") {
-      // resume the same board past 2048
       keepPlaying = true;
       over = false;
       started = true;
