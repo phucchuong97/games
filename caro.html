@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caro - Gomoku</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    gap: 16px;
+    padding: 16px;
+  }
+  h1 { margin: 0; letter-spacing: 2px; color: #4ade80; }
+  #status {
+    font-size: 18px;
+    min-height: 24px;
+    font-weight: bold;
+  }
+  .x { color: #f87171; }
+  .o { color: #60a5fa; }
+  #controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  label { font-size: 14px; color: #94a3b8; }
+  select, button {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1e4d8c;
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button.primary { background: #4ade80; color: #16213e; border: none; font-weight: bold; }
+  button.primary:hover { background: #22c55e; }
+  #board-wrap { overflow: auto; max-width: 100%; }
+  canvas {
+    background: #f5e9c8;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    cursor: pointer;
+    display: block;
+  }
+</style>
+</head>
+<body>
+  <h1>CARO</h1>
+  <div id="status">Your turn (X)</div>
+  <div id="controls">
+    <label>Mode:
+      <select id="mode">
+        <option value="ai">vs Computer</option>
+        <option value="pvp">2 Players</option>
+      </select>
+    </label>
+    <label>Size:
+      <select id="size">
+        <option value="15">15 × 15</option>
+        <option value="11">11 × 11</option>
+        <option value="19">19 × 19</option>
+      </select>
+    </label>
+    <label id="diff-label">Difficulty:
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+    <button class="primary" id="restart">New Game</button>
+  </div>
+  <div id="board-wrap">
+    <canvas id="board"></canvas>
+  </div>
+
+<script>
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const statusEl = document.getElementById("status");
+  const modeEl = document.getElementById("mode");
+  const sizeEl = document.getElementById("size");
+  const difficultyEl = document.getElementById("difficulty");
+  const diffLabel = document.getElementById("diff-label");
+  const restartBtn = document.getElementById("restart");
+
+  const WIN = 5;        // pieces in a row needed to win
+  const CELL = 32;      // pixel size of each cell
+  const PAD = CELL / 2; // padding so edge stones fit
+
+  let N;                // board dimension
+  let board;            // 2D array: "", "X", "O"
+  let current;          // whose turn: "X" or "O"
+  let gameOver;
+  let winLine;          // [{r,c}, ...] of winning cells, or null
+
+  const HUMAN = "X";
+  const AI = "O";
+
+  function init() {
+    N = Number(sizeEl.value);
+    board = Array.from({ length: N }, () => Array(N).fill(""));
+    current = "X";
+    gameOver = false;
+    winLine = null;
+
+    canvas.width = (N - 1) * CELL + PAD * 2;
+    canvas.height = (N - 1) * CELL + PAD * 2;
+
+    diffLabel.style.display = modeEl.value === "ai" ? "" : "none";
+
+    updateStatus();
+    draw();
+  }
+
+  function updateStatus() {
+    if (gameOver) return;
+    if (modeEl.value === "ai") {
+      statusEl.innerHTML = current === HUMAN
+        ? 'Your turn (<span class="x">X</span>)'
+        : 'Computer thinking… (<span class="o">O</span>)';
+    } else {
+      const cls = current === "X" ? "x" : "o";
+      statusEl.innerHTML = `Turn: <span class="${cls}">${current}</span>`;
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // grid lines
+    ctx.strokeStyle = "#b59b6a";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < N; i++) {
+      const p = PAD + i * CELL;
+      ctx.beginPath();
+      ctx.moveTo(PAD, p); ctx.lineTo(PAD + (N - 1) * CELL, p);
+      ctx.moveTo(p, PAD); ctx.lineTo(p, PAD + (N - 1) * CELL);
+      ctx.stroke();
+    }
+
+    // stones
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (board[r][c]) drawStone(r, c, board[r][c]);
+      }
+    }
+
+    // highlight winning line
+    if (winLine) {
+      ctx.strokeStyle = "#22c55e";
+      ctx.lineWidth = 4;
+      const a = winLine[0], b = winLine[winLine.length - 1];
+      ctx.beginPath();
+      ctx.moveTo(PAD + a.c * CELL, PAD + a.r * CELL);
+      ctx.lineTo(PAD + b.c * CELL, PAD + b.r * CELL);
+      ctx.stroke();
+    }
+  }
+
+  function drawStone(r, c, player) {
+    const x = PAD + c * CELL, y = PAD + r * CELL;
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = player === "X" ? "#f87171" : "#60a5fa";
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.stroke();
+  }
+
+  canvas.addEventListener("click", e => {
+    if (gameOver) return;
+    if (modeEl.value === "ai" && current !== HUMAN) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const c = Math.round((e.clientX - rect.left - PAD) / CELL);
+    const r = Math.round((e.clientY - rect.top - PAD) / CELL);
+    if (r < 0 || r >= N || c < 0 || c >= N) return;
+    if (board[r][c]) return;
+
+    place(r, c, current);
+
+    if (gameOver) return;
+
+    if (modeEl.value === "ai") {
+      current = AI;
+      updateStatus();
+      // small delay so the UI can repaint before the AI moves
+      setTimeout(aiMove, 120);
+    } else {
+      current = current === "X" ? "O" : "X";
+      updateStatus();
+    }
+  });
+
+  function place(r, c, player) {
+    board[r][c] = player;
+    const line = findWin(r, c, player);
+    draw();
+    if (line) {
+      winLine = line;
+      gameOver = true;
+      const name = modeEl.value === "ai"
+        ? (player === HUMAN ? "You win!" : "Computer wins!")
+        : `Player ${player} wins!`;
+      const cls = player === "X" ? "x" : "o";
+      statusEl.innerHTML = `<span class="${cls}">${name}</span>`;
+      draw();
+    } else if (isBoardFull()) {
+      gameOver = true;
+      statusEl.textContent = "Draw!";
+    }
+  }
+
+  function isBoardFull() {
+    return board.every(row => row.every(cell => cell));
+  }
+
+  // Check whether placing at (r,c) creates a line of WIN for player.
+  function findWin(r, c, player) {
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (const [dr, dc] of dirs) {
+      const cells = [{ r, c }];
+      for (const sign of [1, -1]) {
+        let nr = r + dr * sign, nc = c + dc * sign;
+        while (nr >= 0 && nr < N && nc >= 0 && nc < N && board[nr][nc] === player) {
+          cells.push({ r: nr, c: nc });
+          nr += dr * sign; nc += dc * sign;
+        }
+      }
+      if (cells.length >= WIN) {
+        // sort along the direction for a clean highlight
+        cells.sort((p, q) => (p.r - q.r) || (p.c - q.c));
+        return cells;
+      }
+    }
+    return null;
+  }
+
+  // ---- Simple heuristic AI ----
+  function aiMove() {
+    if (gameOver) return;
+    const move = bestMove();
+    if (!move) return;
+    place(move.r, move.c, AI);
+    if (!gameOver) {
+      current = HUMAN;
+      updateStatus();
+    }
+  }
+
+  function bestMove() {
+    const level = difficultyEl.value;
+
+    // first move (empty board): play center
+    const candidates = getCandidates();
+    if (candidates.length === 0) {
+      const mid = Math.floor(N / 2);
+      return { r: mid, c: mid };
+    }
+
+    if (level === "hard") return hardMove(candidates);
+    return greedyMove(candidates, level);
+  }
+
+  // All empty cells adjacent to an existing stone.
+  function getCandidates() {
+    const list = [];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (!board[r][c] && hasNeighbor(r, c)) list.push({ r, c });
+      }
+    }
+    return list;
+  }
+
+  // Greedy 1-ply heuristic. Easy adds randomness and weaker defense.
+  function greedyMove(candidates, level) {
+    const defenseWeight = level === "easy" ? 0.5 : 0.9;
+    const scored = candidates.map(({ r, c }) => ({
+      r, c,
+      score: scoreCell(r, c, AI) + scoreCell(r, c, HUMAN) * defenseWeight,
+    }));
+    scored.sort((a, b) => b.score - a.score);
+
+    if (level === "easy") {
+      // Always take an immediate win or block, otherwise pick randomly
+      // from the top handful of moves so play is beatable.
+      if (scored[0].score >= 100000) return scored[0];
+      const pool = scored.slice(0, Math.min(5, scored.length));
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    return scored[0];
+  }
+
+  // Hard: look one reply ahead. For each AI move, assume the human
+  // responds with their strongest move, then maximize the net position.
+  function hardMove(candidates) {
+    // Prune to the most promising AI moves to keep search fast.
+    const ranked = candidates
+      .map(({ r, c }) => ({ r, c, h: scoreCell(r, c, AI) + scoreCell(r, c, HUMAN) }))
+      .sort((a, b) => b.h - a.h)
+      .slice(0, 12);
+
+    let best = ranked[0], bestScore = -Infinity;
+    for (const move of ranked) {
+      const aiGain = scoreCell(move.r, move.c, AI);
+      if (aiGain >= 1000000) return move; // immediate win
+
+      board[move.r][move.c] = AI;
+      // best human reply after our move
+      let humanBest = 0;
+      for (const cand of getCandidates()) {
+        const h = scoreCell(cand.r, cand.c, HUMAN) + scoreCell(cand.r, cand.c, AI) * 0.5;
+        if (h > humanBest) humanBest = h;
+      }
+      board[move.r][move.c] = "";
+
+      const net = aiGain - humanBest;
+      if (net > bestScore) { bestScore = net; best = move; }
+    }
+    return best;
+  }
+
+  function hasNeighbor(r, c) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < N && nc >= 0 && nc < N && board[nr][nc]) return true;
+      }
+    }
+    return false;
+  }
+
+  // Heuristic value of player occupying (r,c), based on resulting line lengths.
+  function scoreCell(r, c, player) {
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    let total = 0;
+    for (const [dr, dc] of dirs) {
+      let count = 1, openEnds = 0;
+      for (const sign of [1, -1]) {
+        let nr = r + dr * sign, nc = c + dc * sign;
+        while (nr >= 0 && nr < N && nc >= 0 && nc < N && board[nr][nc] === player) {
+          count++;
+          nr += dr * sign; nc += dc * sign;
+        }
+        // is the end open (empty, in-bounds)?
+        if (nr >= 0 && nr < N && nc >= 0 && nc < N && board[nr][nc] === "") openEnds++;
+      }
+      if (count >= WIN) total += 1000000;
+      else if (count === 4) total += openEnds === 2 ? 100000 : (openEnds === 1 ? 5000 : 0);
+      else if (count === 3) total += openEnds === 2 ? 5000 : (openEnds === 1 ? 500 : 0);
+      else if (count === 2) total += openEnds === 2 ? 200 : (openEnds === 1 ? 30 : 0);
+      else total += openEnds * 5;
+    }
+    return total;
+  }
+
+  restartBtn.addEventListener("click", init);
+  modeEl.addEventListener("change", init);
+  sizeEl.addEventListener("change", init);
+  difficultyEl.addEventListener("change", init);
+
+  init();
+</script>
+</body>
+</html>
