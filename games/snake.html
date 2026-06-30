@@ -176,6 +176,7 @@
     gameOver = true;
     clearInterval(loopId);
     messageTitle.textContent = "Game Over — Score: " + score;
+    restartBtn.textContent = "Play Again";
     messageEl.classList.add("show");
   }
 
@@ -219,7 +220,10 @@
 
   restartBtn.addEventListener("click", init);
 
-  init();
+  // Show the start screen instead of auto-starting the game.
+  messageTitle.textContent = "🐍 SNAKE";
+  restartBtn.textContent = "Start";
+  messageEl.classList.add("show");
 </script>
 </body>
 </html>
