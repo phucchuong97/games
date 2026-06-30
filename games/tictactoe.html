@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic-Tac-Toe</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    gap: 16px;
+    padding: 16px;
+  }
+  h1 { margin: 0; letter-spacing: 2px; color: #4ade80; }
+  #status { font-size: 18px; min-height: 24px; font-weight: bold; }
+  .x { color: #f87171; }
+  .o { color: #60a5fa; }
+  #controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  label { font-size: 14px; color: #94a3b8; }
+  select, button {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1e4d8c;
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button.primary { background: #4ade80; color: #16213e; border: none; font-weight: bold; }
+  button.primary:hover { background: #22c55e; }
+  #stage { position: relative; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 96px);
+    grid-template-rows: repeat(3, 96px);
+    gap: 8px;
+    background: #0f3460;
+    padding: 8px;
+    border-radius: 10px;
+  }
+  .cell {
+    background: #16213e;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+  }
+  .cell:hover { background: #1c2c50; }
+  .cell.win { background: #14532d; }
+  #message {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(22, 33, 62, 0.9);
+    border-radius: 10px;
+    text-align: center;
+    gap: 16px;
+  }
+  #message.show { display: flex; }
+  #message h2 { margin: 0; color: #4ade80; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+  <h1>TIC-TAC-TOE</h1>
+  <div id="status">&nbsp;</div>
+  <div id="controls">
+    <label>Mode:
+      <select id="mode">
+        <option value="ai">vs Computer</option>
+        <option value="pvp">2 Players</option>
+      </select>
+    </label>
+    <label id="diff-label">Difficulty:
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="hard" selected>Hard (unbeatable)</option>
+      </select>
+    </label>
+    <button class="primary" id="restart">New Game</button>
+  </div>
+  <div id="stage">
+    <div id="board"></div>
+    <div id="message" class="show">
+      <h2 id="message-title">TIC-TAC-TOE</h2>
+      <button class="primary" id="start">Start</button>
+    </div>
+  </div>
+
+<script>
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const modeEl = document.getElementById("mode");
+  const difficultyEl = document.getElementById("difficulty");
+  const diffLabel = document.getElementById("diff-label");
+  const restartBtn = document.getElementById("restart");
+  const messageEl = document.getElementById("message");
+  const startBtn = document.getElementById("start");
+
+  const HUMAN = "X", AI = "O";
+  const LINES = [
+    [0,1,2],[3,4,5],[6,7,8],   // rows
+    [0,3,6],[1,4,7],[2,5,8],   // cols
+    [0,4,8],[2,4,6],           // diagonals
+  ];
+
+  let board, current, gameOver, started;
+  const cells = [];
+
+  for (let i = 0; i < 9; i++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.dataset.i = i;
+    c.addEventListener("click", () => onClick(i));
+    boardEl.appendChild(c);
+    cells.push(c);
+  }
+
+  function init() {
+    board = Array(9).fill("");
+    current = HUMAN;
+    gameOver = false;
+    started = false;
+    diffLabel.style.display = modeEl.value === "ai" ? "" : "none";
+    cells.forEach(c => { c.textContent = ""; c.className = "cell"; });
+    messageEl.classList.add("show");
+    updateStatus();
+  }
+
+  function updateStatus() {
+    if (gameOver) return;
+    if (modeEl.value === "ai") {
+      statusEl.innerHTML = current === HUMAN
+        ? 'Your turn (<span class="x">X</span>)'
+        : 'Computer thinking…';
+    } else {
+      const cls = current === "X" ? "x" : "o";
+      statusEl.innerHTML = `Turn: <span class="${cls}">${current}</span>`;
+    }
+  }
+
+  function onClick(i) {
+    if (!started || gameOver || board[i]) return;
+    if (modeEl.value === "ai" && current !== HUMAN) return;
+    place(i, current);
+    if (gameOver) return;
+    if (modeEl.value === "ai") {
+      current = AI;
+      updateStatus();
+      setTimeout(aiMove, 250);
+    } else {
+      current = current === "X" ? "O" : "X";
+      updateStatus();
+    }
+  }
+
+  function place(i, player) {
+    board[i] = player;
+    cells[i].textContent = player;
+    cells[i].classList.add(player === "X" ? "x" : "o");
+
+    const line = winningLine(board, player);
+    if (line) {
+      gameOver = true;
+      line.forEach(idx => cells[idx].classList.add("win"));
+      const name = modeEl.value === "ai"
+        ? (player === HUMAN ? "You win! 🎉" : "Computer wins!")
+        : `Player ${player} wins!`;
+      const cls = player === "X" ? "x" : "o";
+      statusEl.innerHTML = `<span class="${cls}">${name}</span>`;
+    } else if (board.every(v => v)) {
+      gameOver = true;
+      statusEl.textContent = "It's a draw!";
+    }
+  }
+
+  function winningLine(b, player) {
+    return LINES.find(l => l.every(i => b[i] === player)) || null;
+  }
+
+  function aiMove() {
+    if (gameOver) return;
+    const i = difficultyEl.value === "hard" ? bestMove() : randomMove();
+    place(i, AI);
+    if (!gameOver) {
+      current = HUMAN;
+      updateStatus();
+    }
+  }
+
+  function randomMove() {
+    // mostly random, but still take an immediate win or block
+    const win = findCritical(AI);
+    if (win !== -1) return win;
+    if (Math.random() < 0.6) {
+      const block = findCritical(HUMAN);
+      if (block !== -1) return block;
+    }
+    const empty = board.map((v, i) => v ? -1 : i).filter(i => i !== -1);
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  function findCritical(player) {
+    for (let i = 0; i < 9; i++) {
+      if (board[i]) continue;
+      board[i] = player;
+      const won = winningLine(board, player);
+      board[i] = "";
+      if (won) return i;
+    }
+    return -1;
+  }
+
+  // Unbeatable AI via minimax.
+  function bestMove() {
+    let bestScore = -Infinity, move = -1;
+    for (let i = 0; i < 9; i++) {
+      if (board[i]) continue;
+      board[i] = AI;
+      const score = minimax(board, 0, false);
+      board[i] = "";
+      if (score > bestScore) { bestScore = score; move = i; }
+    }
+    return move;
+  }
+
+  function minimax(b, depth, isMax) {
+    if (winningLine(b, AI)) return 10 - depth;
+    if (winningLine(b, HUMAN)) return depth - 10;
+    if (b.every(v => v)) return 0;
+
+    let best = isMax ? -Infinity : Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i]) continue;
+      b[i] = isMax ? AI : HUMAN;
+      const score = minimax(b, depth + 1, !isMax);
+      b[i] = "";
+      best = isMax ? Math.max(best, score) : Math.min(best, score);
+    }
+    return best;
+  }
+
+  startBtn.addEventListener("click", () => {
+    started = true;
+    messageEl.classList.remove("show");
+  });
+  restartBtn.addEventListener("click", init);
+  modeEl.addEventListener("change", init);
+  difficultyEl.addEventListener("change", init);
+
+  init();
+</script>
+</body>
+</html>

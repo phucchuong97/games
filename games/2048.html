@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2048</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    gap: 16px;
+    padding: 16px;
+  }
+  h1 { margin: 0; letter-spacing: 2px; color: #4ade80; }
+  #scoreboard { display: flex; gap: 32px; font-size: 18px; }
+  #scoreboard b { color: #4ade80; }
+  #stage { position: relative; }
+  #grid {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(4, 84px);
+    grid-template-rows: repeat(4, 84px);
+    gap: 12px;
+    touch-action: none;
+  }
+  .tile {
+    border-radius: 8px;
+    background: #0f2a4d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: bold;
+    color: #16213e;
+  }
+  .tile[data-v="2"]    { background: #eee4da; color: #5b5247; }
+  .tile[data-v="4"]    { background: #ede0c8; color: #5b5247; }
+  .tile[data-v="8"]    { background: #f2b179; }
+  .tile[data-v="16"]   { background: #f59563; }
+  .tile[data-v="32"]   { background: #f67c5f; }
+  .tile[data-v="64"]   { background: #f65e3b; color: #fff; }
+  .tile[data-v="128"]  { background: #edcf72; font-size: 28px; }
+  .tile[data-v="256"]  { background: #edcc61; font-size: 28px; }
+  .tile[data-v="512"]  { background: #edc850; font-size: 28px; }
+  .tile[data-v="1024"] { background: #edc53f; font-size: 22px; color: #fff; }
+  .tile[data-v="2048"] { background: #edc22e; font-size: 22px; color: #fff; }
+  #message {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(22, 33, 62, 0.9);
+    border-radius: 10px;
+    text-align: center;
+    gap: 16px;
+  }
+  #message.show { display: flex; }
+  #message h2 { margin: 0; color: #4ade80; letter-spacing: 2px; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    border: none;
+    padding: 10px 22px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #22c55e; }
+  #hint { font-size: 13px; color: #94a3b8; }
+</style>
+</head>
+<body>
+  <h1>2048</h1>
+  <div id="scoreboard">
+    <span>Score: <b id="score">0</b></span>
+    <span>Best: <b id="best">0</b></span>
+  </div>
+  <div id="stage">
+    <div id="grid"></div>
+    <div id="message" class="show">
+      <h2 id="message-title">2048</h2>
+      <button id="action">Start</button>
+    </div>
+  </div>
+  <div id="hint">Use arrow keys or WASD (swipe on mobile). Reach 2048!</div>
+
+<script>
+  const gridEl = document.getElementById("grid");
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const messageEl = document.getElementById("message");
+  const messageTitle = document.getElementById("message-title");
+  const actionBtn = document.getElementById("action");
+
+  const SIZE = 4;
+  let board, score, best, started, over, won, keepPlaying;
+
+  best = Number(localStorage.getItem("best2048") || 0);
+  bestEl.textContent = best;
+
+  // build the 16 tile cells once
+  const cells = [];
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const t = document.createElement("div");
+    t.className = "tile";
+    gridEl.appendChild(t);
+    cells.push(t);
+  }
+
+  function init() {
+    board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    score = 0;
+    over = false;
+    won = false;
+    keepPlaying = false;
+    scoreEl.textContent = score;
+    addRandom();
+    addRandom();
+    render();
+  }
+
+  function addRandom() {
+    const empty = [];
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (board[r][c] === 0) empty.push({ r, c });
+    if (!empty.length) return;
+    const { r, c } = empty[Math.floor(Math.random() * empty.length)];
+    board[r][c] = Math.random() < 0.9 ? 2 : 4;
+  }
+
+  function render() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const v = board[r][c];
+        const cell = cells[r * SIZE + c];
+        cell.textContent = v || "";
+        cell.dataset.v = v || "";
+      }
+    }
+  }
+
+  // collapse one row to the left, return {row, gained, moved}
+  function slide(row) {
+    const nums = row.filter(v => v !== 0);
+    let gained = 0;
+    for (let i = 0; i < nums.length - 1; i++) {
+      if (nums[i] === nums[i + 1]) {
+        nums[i] *= 2;
+        gained += nums[i];
+        if (nums[i] === 2048) won = true;
+        nums.splice(i + 1, 1);
+      }
+    }
+    while (nums.length < SIZE) nums.push(0);
+    const moved = nums.some((v, i) => v !== row[i]);
+    return { row: nums, gained, moved };
+  }
+
+  // rotate clockwise
+  function rotate(b) {
+    const n = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        n[c][SIZE - 1 - r] = b[r][c];
+    return n;
+  }
+
+  // dir: 0 left, 1 up, 2 right, 3 down
+  function move(dir) {
+    if (!started || over) return;
+
+    // rotate so the move direction becomes "left", slide, then rotate back
+    for (let i = 0; i < dir; i++) board = rotate(board);
+    let moved = false;
+    for (let r = 0; r < SIZE; r++) {
+      const res = slide(board[r]);
+      board[r] = res.row;
+      score += res.gained;
+      if (res.moved) moved = true;
+    }
+    for (let i = 0; i < (4 - dir) % 4; i++) board = rotate(board);
+
+    if (!moved) return;
+
+    addRandom();
+    scoreEl.textContent = score;
+    if (score > best) {
+      best = score;
+      bestEl.textContent = best;
+      localStorage.setItem("best2048", best);
+    }
+    render();
+
+    if (won && !keepPlaying) return showMessage("🎉 You reached 2048!", "Keep Going");
+    if (isStuck()) return showMessage("Game Over — Score: " + score, "Try Again");
+  }
+
+  function isStuck() {
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++) {
+        if (board[r][c] === 0) return false;
+        if (c < SIZE - 1 && board[r][c] === board[r][c + 1]) return false;
+        if (r < SIZE - 1 && board[r][c] === board[r + 1][c]) return false;
+      }
+    return true;
+  }
+
+  function showMessage(title, btn) {
+    over = true;
+    started = false;
+    messageTitle.textContent = title;
+    actionBtn.textContent = btn;
+    messageEl.classList.add("show");
+  }
+
+  actionBtn.addEventListener("click", () => {
+    messageEl.classList.remove("show");
+    if (actionBtn.textContent === "Keep Going") {
+      // resume the same board past 2048
+      keepPlaying = true;
+      over = false;
+      started = true;
+    } else {
+      init();
+      started = true;
+    }
+  });
+
+  document.addEventListener("keydown", e => {
+    const map = {
+      ArrowLeft: 0, a: 0, A: 0,
+      ArrowUp: 1, w: 1, W: 1,
+      ArrowRight: 2, d: 2, D: 2,
+      ArrowDown: 3, s: 3, S: 3,
+    };
+    if (e.key in map) {
+      e.preventDefault();
+      move(map[e.key]);
+    }
+  });
+
+  // swipe support
+  let touch = null;
+  gridEl.addEventListener("touchstart", e => {
+    touch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  });
+  gridEl.addEventListener("touchend", e => {
+    if (!touch) return;
+    const dx = e.changedTouches[0].clientX - touch.x;
+    const dy = e.changedTouches[0].clientY - touch.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) >= 20) {
+      if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 2 : 0);
+      else move(dy > 0 ? 3 : 1);
+    }
+    touch = null;
+  });
+
+  init(); // populate the board behind the start overlay
+</script>
+</body>
+</html>
