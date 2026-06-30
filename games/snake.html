@@ -125,12 +125,12 @@
     if (paused || gameOver) return;
 
     dir = nextDir;
-    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    // wrap around the walls: exiting one edge re-enters the opposite edge
+    const head = {
+      x: (snake[0].x + dir.x + GRID) % GRID,
+      y: (snake[0].y + dir.y + GRID) % GRID,
+    };
 
-    // wall collision
-    if (head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID) {
-      return end();
-    }
     // self collision
     if (snake.some(s => s.x === head.x && s.y === head.y)) {
       return end();
