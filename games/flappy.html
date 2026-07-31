@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Bird</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    gap: 16px;
+  }
+  h1 { margin: 0; letter-spacing: 2px; color: #4ade80; }
+  #game-wrap { position: relative; }
+  canvas {
+    display: block;
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(22, 33, 62, 0.88);
+    border-radius: 8px;
+    text-align: center;
+    gap: 14px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 { margin: 0; font-size: 28px; }
+  #overlay p { margin: 0; color: #94a3b8; font-size: 14px; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    border: none;
+    padding: 10px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #22c55e; }
+  #hint { font-size: 13px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>FLAPPY BIRD</h1>
+<div id="game-wrap">
+  <canvas id="c" width="400" height="600"></canvas>
+  <div id="overlay">
+    <h2 id="ov-title">🐦 FLAPPY BIRD</h2>
+    <p id="ov-sub">Press Space, tap, or click to flap</p>
+    <button id="ov-btn">Start</button>
+  </div>
+</div>
+<div id="hint">Space / Tap to flap</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const overlayEl = document.getElementById('overlay');
+const ovTitle = document.getElementById('ov-title');
+const ovSub = document.getElementById('ov-sub');
+const ovBtn = document.getElementById('ov-btn');
+
+const GRAVITY = 0.45;
+const FLAP_VY = -8;
+const PIPE_W = 52;
+const PIPE_GAP = 150;
+const PIPE_SPEED = 2.6;
+const PIPE_INTERVAL = 90; // frames
+
+let bird, pipes, score, best, frame, running, dead;
+best = Number(localStorage.getItem('flappyBest') || 0);
+
+function initGame() {
+  bird = { x: 80, y: H / 2, vy: 0, r: 14 };
+  pipes = [];
+  score = 0;
+  frame = 0;
+  running = true;
+  dead = false;
+}
+
+function flap() {
+  if (dead) return;
+  bird.vy = FLAP_VY;
+}
+
+function spawnPipe() {
+  const minY = 80, maxY = H - 80 - PIPE_GAP;
+  const topH = minY + Math.random() * (maxY - minY);
+  pipes.push({ x: W + 10, topH, passed: false });
+}
+
+function update() {
+  if (!running) return;
+  frame++;
+
+  bird.vy += GRAVITY;
+  bird.y += bird.vy;
+
+  if (frame % PIPE_INTERVAL === 0) spawnPipe();
+
+  for (const p of pipes) {
+    p.x -= PIPE_SPEED;
+    if (!p.passed && p.x + PIPE_W < bird.x) {
+      p.passed = true;
+      score++;
+      if (score > best) {
+        best = score;
+        localStorage.setItem('flappyBest', best);
+      }
+    }
+  }
+  pipes = pipes.filter(p => p.x + PIPE_W > -10);
+
+  // collision: floor/ceiling
+  if (bird.y - bird.r < 0 || bird.y + bird.r > H) {
+    die();
+    return;
+  }
+
+  // collision: pipes
+  for (const p of pipes) {
+    if (bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W) {
+      if (bird.y - bird.r < p.topH || bird.y + bird.r > p.topH + PIPE_GAP) {
+        die();
+        return;
+      }
+    }
+  }
+}
+
+function die() {
+  dead = true;
+  running = false;
+  ovTitle.textContent = '💥 Game Over';
+  ovSub.textContent = `Score: ${score} · Best: ${best}`;
+  ovBtn.textContent = 'Play Again';
+  overlayEl.classList.remove('hidden');
+}
+
+function drawRoundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // floor/ceiling lines
+  ctx.strokeStyle = '#0f3460';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, H); ctx.stroke();
+
+  // pipes
+  for (const p of pipes) {
+    ctx.fillStyle = '#22c55e';
+    // top pipe
+    drawRoundRect(p.x, 0, PIPE_W, p.topH, 4);
+    ctx.fill();
+    ctx.fillStyle = '#16a34a';
+    ctx.fillRect(p.x - 4, p.topH - 18, PIPE_W + 8, 18);
+    // bottom pipe
+    const botY = p.topH + PIPE_GAP;
+    ctx.fillStyle = '#22c55e';
+    drawRoundRect(p.x, botY, PIPE_W, H - botY, 4);
+    ctx.fill();
+    ctx.fillStyle = '#16a34a';
+    ctx.fillRect(p.x - 4, botY, PIPE_W + 8, 18);
+  }
+
+  // bird
+  const bx = bird.x, by = bird.y, br = bird.r;
+  // body
+  ctx.fillStyle = '#facc15';
+  ctx.beginPath();
+  ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.fill();
+  // wing
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  ctx.ellipse(bx - 4, by + 4, 8, 5, Math.PI / 6, 0, Math.PI * 2);
+  ctx.fill();
+  // eye
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.arc(bx + 5, by - 3, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(bx + 6, by - 4, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  // beak
+  ctx.fillStyle = '#f97316';
+  ctx.beginPath();
+  ctx.moveTo(bx + br - 2, by);
+  ctx.lineTo(bx + br + 8, by - 2);
+  ctx.lineTo(bx + br + 8, by + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // score
+  ctx.fillStyle = '#e0e0e0';
+  ctx.font = 'bold 28px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(score, W / 2, 44);
+  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('Best: ' + best, W / 2, 66);
+}
+
+let rafId;
+function loop() {
+  update();
+  draw();
+  rafId = requestAnimationFrame(loop);
+}
+
+function startGame() {
+  overlayEl.classList.add('hidden');
+  cancelAnimationFrame(rafId);
+  initGame();
+  loop();
+}
+
+ovBtn.addEventListener('click', startGame);
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (!running && !dead) { startGame(); return; }
+    flap();
+  }
+});
+canvas.addEventListener('click', () => {
+  if (!running && !dead) { startGame(); return; }
+  flap();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (!running && !dead) { startGame(); return; }
+  flap();
+}, { passive: false });
+
+// draw static frame before start
+draw();
+</script>
+</body>
+</html>

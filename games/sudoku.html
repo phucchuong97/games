@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sudoku</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #1a1a2e; color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif; gap: 12px; padding: 24px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 2px; font-size: 28px; }
+.topbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
+select, button {
+  background: #16213e; color: #e0e0e0; border: 1px solid #0f3460;
+  border-radius: 6px; padding: 6px 14px; font-size: 14px; cursor: pointer;
+}
+button.primary { background: #4ade80; color: #16213e; border: none; font-weight: bold; }
+button.primary:hover { background: #22c55e; }
+#timer { color: #94a3b8; font-size: 14px; min-width: 60px; text-align: center; }
+#grid {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  border: 3px solid #4ade80; border-radius: 4px; overflow: hidden;
+  width: min(450px, 94vw); height: min(450px, 94vw);
+}
+.cell {
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(14px, 3vw, 22px); font-weight: bold; cursor: pointer;
+  border-right: 1px solid #0f3460; border-bottom: 1px solid #0f3460;
+  background: #16213e; transition: background 0.1s; user-select: none;
+  position: relative;
+}
+.cell:nth-child(3n) { border-right: 3px solid #4ade80; }
+.cell:nth-child(9n) { border-right: none; }
+.cell:nth-child(n+19):nth-child(-n+27),
+.cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 3px solid #4ade80; }
+.cell.given { color: #e0e0e0; }
+.cell.user-filled { color: #60a5fa; }
+.cell.selected { background: #1e3a5f !important; outline: 2px solid #4ade80; outline-offset: -2px; z-index:2; }
+.cell.highlight { background: #1a2a3a; }
+.cell.same-num { background: #1a3040; }
+.cell.conflict { color: #f87171 !important; }
+.notes { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; width: 100%; height: 100%; padding: 1px; }
+.notes span { font-size: clamp(5px,1vw,8px); color: #64748b; text-align: center; line-height: 1.4; font-weight: normal; }
+.numpad {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  width: min(450px, 94vw);
+}
+.numpad button {
+  background: #16213e; border: 1px solid #0f3460; color: #e0e0e0;
+  font-size: 18px; font-weight: bold; padding: 10px; border-radius: 6px; cursor: pointer;
+}
+.numpad button:hover { background: #1e3a5f; }
+.numpad button.erase { color: #f87171; }
+#status { color: #94a3b8; font-size: 13px; min-height: 20px; }
+#win-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(26,26,46,0.9); flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+}
+#win-overlay.show { display: flex; }
+#win-overlay h2 { color: #4ade80; font-size: 32px; margin: 0; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>SUDOKU</h1>
+<div class="topbar">
+  <select id="diff">
+    <option value="easy">Easy</option>
+    <option value="medium" selected>Medium</option>
+    <option value="hard">Hard</option>
+  </select>
+  <button class="primary" onclick="newGame()">New Game</button>
+  <button onclick="hint()">Hint</button>
+  <span id="timer">0:00</span>
+</div>
+<div id="grid"></div>
+<div class="numpad" id="numpad"></div>
+<div id="status"></div>
+
+<div id="win-overlay">
+  <h2>Puzzle Solved!</h2>
+  <div id="win-time" style="color:#94a3b8"></div>
+  <button class="primary" onclick="newGame();document.getElementById('win-overlay').classList.remove('show')">Play Again</button>
+</div>
+
+<script>
+const BASE = [
+  [5,3,4,6,7,8,9,1,2],[6,7,2,1,9,5,3,4,8],[1,9,8,3,4,2,5,6,7],
+  [8,5,9,7,6,1,4,2,3],[4,2,6,8,5,3,7,9,1],[7,1,3,9,2,4,8,5,6],
+  [9,6,1,5,3,7,2,8,4],[2,8,7,4,1,9,6,3,5],[3,4,5,2,8,6,1,7,9]
+];
+
+let solution, puzzle, board, selected, timerInt, seconds, given;
+
+function shuffle(arr) {
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function generatePuzzle(difficulty) {
+  // Randomize BASE by shuffling rows within bands, cols within stacks, and shuffling numbers
+  const numMap = shuffle([1,2,3,4,5,6,7,8,9]);
+  let sol = BASE.map(row => row.map(v => numMap[v-1]));
+  // Shuffle rows within each band
+  [[0,1,2],[3,4,5],[6,7,8]].forEach(band => {
+    const rows = shuffle([...band]);
+    const tmp = [sol[band[0]], sol[band[1]], sol[band[2]]];
+    band.forEach((r,i) => sol[r] = tmp[rows[i]-band[0]]);
+  });
+  solution = sol.map(r => [...r]);
+  const givens = {easy:35, medium:28, hard:22}[difficulty];
+  const cells = shuffle([...Array(81).keys()]);
+  puzzle = sol.map(r => [...r]);
+  let removed = 0;
+  for (const idx of cells) {
+    if (removed >= 81 - givens) break;
+    puzzle[Math.floor(idx/9)][idx%9] = 0;
+    removed++;
+  }
+}
+
+function newGame() {
+  clearInterval(timerInt);
+  seconds = 0;
+  updateTimer();
+  timerInt = setInterval(() => { seconds++; updateTimer(); }, 1000);
+  generatePuzzle(document.getElementById('diff').value);
+  board = puzzle.map(r => r.map(v => ({ val: v, given: v !== 0, notes: new Set() })));
+  selected = null;
+  render();
+  document.getElementById('status').textContent = '';
+}
+
+function updateTimer() {
+  const m = Math.floor(seconds/60), s = seconds%60;
+  document.getElementById('timer').textContent = m+':'+(s<10?'0':'')+s;
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const data = board[r][c];
+      if (data.given) cell.classList.add('given');
+      else if (data.val) cell.classList.add('user-filled');
+
+      const selR = selected ? Math.floor(selected/9) : -1;
+      const selC = selected ? selected%9 : -1;
+      const idx = r*9+c;
+      if (selected !== null) {
+        if (idx === selected) cell.classList.add('selected');
+        else if (r === selR || c === selC || (Math.floor(r/3)===Math.floor(selR/3) && Math.floor(c/3)===Math.floor(selC/3)))
+          cell.classList.add('highlight');
+        const selVal = board[selR]?.[selC]?.val;
+        if (selVal && data.val === selVal && idx !== selected) cell.classList.add('same-num');
+      }
+
+      if (data.val && !data.given && isConflict(r, c)) cell.classList.add('conflict');
+
+      if (data.val) {
+        cell.textContent = data.val;
+      } else if (data.notes.size) {
+        const nd = document.createElement('div');
+        nd.className = 'notes';
+        for (let n = 1; n <= 9; n++) {
+          const s = document.createElement('span');
+          s.textContent = data.notes.has(n) ? n : '';
+          nd.appendChild(s);
+        }
+        cell.appendChild(nd);
+      }
+
+      cell.addEventListener('click', () => { selected = idx; render(); });
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function isConflict(r, c) {
+  const v = board[r][c].val;
+  if (!v) return false;
+  for (let i = 0; i < 9; i++) {
+    if (i !== c && board[r][i].val === v) return true;
+    if (i !== r && board[i][c].val === v) return true;
+  }
+  const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+  for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) {
+    const nr = br+dr, nc = bc+dc;
+    if (!(nr===r && nc===c) && board[nr][nc].val === v) return true;
+  }
+  return false;
+}
+
+function setCell(num) {
+  if (selected === null) return;
+  const r = Math.floor(selected/9), c = selected%9;
+  if (board[r][c].given) return;
+  board[r][c].val = num;
+  board[r][c].notes.clear();
+  render();
+  checkWin();
+}
+
+function checkWin() {
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    if (board[r][c].val !== solution[r][c]) return;
+  }
+  clearInterval(timerInt);
+  const m = Math.floor(seconds/60), s = seconds%60;
+  document.getElementById('win-time').textContent = `Solved in ${m}:${s<10?'0':''}${s}`;
+  document.getElementById('win-overlay').classList.add('show');
+}
+
+function hint() {
+  const empties = [];
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++)
+    if (!board[r][c].val) empties.push([r,c]);
+  if (!empties.length) return;
+  const [r,c] = empties[Math.floor(Math.random()*empties.length)];
+  board[r][c].val = solution[r][c];
+  board[r][c].given = true;
+  selected = r*9+c;
+  render();
+  checkWin();
+}
+
+document.addEventListener('keydown', e => {
+  if (selected === null) return;
+  if (e.key >= '1' && e.key <= '9') setCell(+e.key);
+  else if (e.key === 'Backspace' || e.key === 'Delete') setCell(0);
+  else if (e.key === 'ArrowUp' && selected >= 9) { selected -= 9; render(); }
+  else if (e.key === 'ArrowDown' && selected < 72) { selected += 9; render(); }
+  else if (e.key === 'ArrowLeft' && selected % 9 > 0) { selected--; render(); }
+  else if (e.key === 'ArrowRight' && selected % 9 < 8) { selected++; render(); }
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+});
+
+const numpad = document.getElementById('numpad');
+for (let n = 1; n <= 9; n++) {
+  const b = document.createElement('button');
+  b.textContent = n;
+  b.addEventListener('click', () => setCell(n));
+  numpad.appendChild(b);
+}
+const erase = document.createElement('button');
+erase.textContent = '✕';
+erase.className = 'erase';
+erase.addEventListener('click', () => setCell(0));
+numpad.appendChild(erase);
+
+newGame();
+</script>
+</body>
+</html>

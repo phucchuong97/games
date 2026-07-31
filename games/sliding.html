@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sliding Puzzle</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #1a1a2e; color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif; gap: 14px; padding: 24px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 2px; font-size: 28px; }
+.topbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+select, button {
+  background: #16213e; color: #e0e0e0; border: 1px solid #0f3460;
+  border-radius: 6px; padding: 6px 14px; font-size: 14px; cursor: pointer;
+}
+button.primary { background: #4ade80; color: #16213e; border: none; font-weight: bold; }
+button.primary:hover { background: #22c55e; }
+.stats { display: flex; gap: 24px; color: #94a3b8; font-size: 14px; }
+.stats b { color: #4ade80; }
+#board-wrap {
+  position: relative;
+  width: min(420px, 92vw); height: min(420px, 92vw);
+}
+#board {
+  width: 100%; height: 100%;
+  position: relative;
+}
+.tile {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  background: #16213e; border: 2px solid #0f3460;
+  border-radius: 8px; font-weight: bold; color: #e0e0e0;
+  cursor: pointer; user-select: none;
+  transition: top 0.12s ease, left 0.12s ease;
+}
+.tile:hover { border-color: #4ade80; }
+.tile.blank { background: #0f1a2e; border-color: #0a1525; cursor: default; }
+#overlay {
+  display: none; position: absolute; inset: 0;
+  background: rgba(22,33,62,0.92); border-radius: 8px;
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+#overlay.show { display: flex; }
+#overlay h2 { color: #4ade80; margin: 0; font-size: 28px; }
+#overlay p { color: #94a3b8; margin: 0; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>SLIDING PUZZLE</h1>
+<div class="topbar">
+  <select id="size">
+    <option value="3">3×3 (8-puzzle)</option>
+    <option value="4" selected>4×4 (15-puzzle)</option>
+    <option value="5">5×5 (24-puzzle)</option>
+  </select>
+  <button class="primary" onclick="newGame()">Shuffle</button>
+</div>
+<div class="stats">
+  <span>Moves: <b id="moves">0</b></span>
+  <span>Time: <b id="timer">0:00</b></span>
+</div>
+<div id="board-wrap">
+  <div id="board"></div>
+  <div id="overlay">
+    <h2>Solved!</h2>
+    <p id="fin-stats"></p>
+    <button class="primary" onclick="newGame();document.getElementById('overlay').classList.remove('show')">Play Again</button>
+  </div>
+</div>
+
+<script>
+let N, tiles, blankIdx, moves, timerInt, seconds;
+
+function newGame() {
+  N = +document.getElementById('size').value;
+  clearInterval(timerInt);
+  seconds = 0; moves = 0;
+  document.getElementById('moves').textContent = 0;
+  updateTimer();
+  document.getElementById('overlay').classList.remove('show');
+
+  // Start solved, then shuffle with random moves
+  tiles = Array.from({length: N*N}, (_,i) => i);
+  blankIdx = N*N - 1;
+  let last = -1;
+  for (let i = 0; i < 300; i++) {
+    const neighbors = getNeighbors(blankIdx).filter(n => n !== last);
+    const pick = neighbors[Math.floor(Math.random()*neighbors.length)];
+    tiles[blankIdx] = tiles[pick];
+    tiles[pick] = 0;
+    last = blankIdx;
+    blankIdx = pick;
+  }
+
+  timerInt = setInterval(() => { seconds++; updateTimer(); }, 1000);
+  render();
+}
+
+function updateTimer() {
+  const m = Math.floor(seconds/60), s = seconds%60;
+  document.getElementById('timer').textContent = m+':'+(s<10?'0':'')+s;
+}
+
+function getNeighbors(idx) {
+  const r = Math.floor(idx/N), c = idx%N, result = [];
+  if (r > 0) result.push(idx-N);
+  if (r < N-1) result.push(idx+N);
+  if (c > 0) result.push(idx-1);
+  if (c < N-1) result.push(idx+1);
+  return result;
+}
+
+function render() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const size = board.offsetWidth;
+  const gap = 4;
+  const tileSize = (size - gap*(N+1)) / N;
+  const fontSize = Math.max(12, tileSize * 0.45);
+
+  for (let i = 0; i < N*N; i++) {
+    const val = tiles[i];
+    const div = document.createElement('div');
+    div.className = 'tile' + (val === 0 ? ' blank' : '');
+    div.style.width = tileSize + 'px';
+    div.style.height = tileSize + 'px';
+    div.style.fontSize = fontSize + 'px';
+    const row = Math.floor(i/N), col = i%N;
+    div.style.top = (gap + row*(tileSize+gap)) + 'px';
+    div.style.left = (gap + col*(tileSize+gap)) + 'px';
+    if (val !== 0) div.textContent = val;
+    div.addEventListener('click', () => clickTile(i));
+    board.appendChild(div);
+  }
+}
+
+function clickTile(idx) {
+  if (tiles[idx] === 0) return;
+  const neighbors = getNeighbors(idx);
+  if (!neighbors.includes(blankIdx)) return;
+  tiles[blankIdx] = tiles[idx];
+  tiles[idx] = 0;
+  blankIdx = idx;
+  moves++;
+  document.getElementById('moves').textContent = moves;
+  render();
+  if (checkWin()) {
+    clearInterval(timerInt);
+    const m = Math.floor(seconds/60), s = seconds%60;
+    document.getElementById('fin-stats').textContent = `${moves} moves · ${m}:${s<10?'0':''}${s}`;
+    document.getElementById('overlay').classList.add('show');
+  }
+}
+
+function checkWin() {
+  for (let i = 0; i < N*N-1; i++) if (tiles[i] !== i+1) return false;
+  return tiles[N*N-1] === 0;
+}
+
+document.addEventListener('keydown', e => {
+  const map = {ArrowUp: N, ArrowDown: -N, ArrowLeft: 1, ArrowRight: -1};
+  const delta = map[e.key];
+  if (delta === undefined) return;
+  e.preventDefault();
+  const target = blankIdx + delta;
+  if (target < 0 || target >= N*N) return;
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && Math.floor(target/N) !== Math.floor(blankIdx/N)) return;
+  clickTile(target);
+});
+
+document.getElementById('size').addEventListener('change', newGame);
+newGame();
+</script>
+</body>
+</html>

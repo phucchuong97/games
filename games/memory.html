@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  padding: 20px 12px;
+  gap: 14px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 3px; font-size: 26px; }
+#controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+#controls label { font-size: 14px; color: #94a3b8; }
+select {
+  background: #16213e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+#stats { display: flex; gap: 24px; font-size: 15px; color: #94a3b8; }
+#stats b { color: #4ade80; }
+#grid {
+  display: grid;
+  gap: 8px;
+}
+.card-wrap {
+  width: 72px;
+  height: 72px;
+  perspective: 600px;
+  cursor: pointer;
+}
+.card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.4s ease;
+}
+.card-wrap.flipped .card-inner { transform: rotateY(180deg); }
+.card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.card-back {
+  background: linear-gradient(135deg, #1e3a5f, #0f3460);
+  border: 2px solid #0f3460;
+  font-size: 26px;
+}
+.card-back::after { content: "?"; color: #4ade80; font-weight: bold; font-size: 28px; }
+.card-front {
+  background: #16213e;
+  border: 2px solid #0f3460;
+  font-size: 36px;
+  transform: rotateY(180deg);
+}
+.card-wrap.matched .card-front {
+  border-color: #4ade80;
+  background: #0d2b1d;
+}
+.card-wrap.matched { cursor: default; }
+button {
+  background: #4ade80;
+  color: #16213e;
+  border: none;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button:hover { background: #22c55e; }
+#win-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(26,26,46,0.9);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 10;
+}
+#win-overlay.show { display: flex; }
+#win-overlay h2 { margin: 0; color: #4ade80; font-size: 32px; }
+#win-overlay p { margin: 0; color: #94a3b8; font-size: 16px; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>MEMORY</h1>
+
+<div id="controls">
+  <label>Difficulty:
+    <select id="difficulty">
+      <option value="easy">Easy (4×4)</option>
+      <option value="medium">Medium (4×6)</option>
+      <option value="hard">Hard (6×6)</option>
+    </select>
+  </label>
+  <button id="new-btn">New Game</button>
+</div>
+
+<div id="stats">
+  <span>Moves: <b id="moves">0</b></span>
+  <span>Time: <b id="timer">0:00</b></span>
+  <span>Pairs: <b id="pairs">0</b>/<b id="total-pairs">0</b></span>
+</div>
+
+<div id="grid"></div>
+
+<div id="win-overlay">
+  <h2>You Win! 🎉</h2>
+  <p id="win-stats"></p>
+  <button id="win-new-btn">Play Again</button>
+</div>
+
+<script>
+const EMOJIS = [
+  "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮",
+  "🐸","🐵","🐔","🐧","🐦","🦆","🦅","🦉","🦇","🐺","🐗","🐴",
+  "🦄","🐝","🐛","🦋","🐌","🐞","🐜","🦟","🦗","🦂","🐢","🐍",
+  "🦎","🦖","🦕","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬",
+  "🐳","🦈","🐊","🐆","🐅","🦓","🦍","🦧","🦣","🐘","🦛","🦏"
+];
+
+const CONFIGS = {
+  easy:   { cols: 4, rows: 4 },
+  medium: { cols: 6, rows: 4 },
+  hard:   { cols: 6, rows: 6 }
+};
+
+let flipped = [], matched = 0, moves = 0, totalPairs = 0;
+let locked = false, timerInterval, startTime, started = false;
+
+function startTimer() {
+  if (started) return;
+  started = true;
+  startTime = Date.now();
+  timerInterval = setInterval(updateTimer, 500);
+}
+
+function updateTimer() {
+  const sec = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(sec / 60), s = sec % 60;
+  document.getElementById("timer").textContent = `${m}:${s.toString().padStart(2,"0")}`;
+}
+
+function formatTime() {
+  const sec = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${s.toString().padStart(2,"0")}`;
+}
+
+function init() {
+  clearInterval(timerInterval);
+  flipped = []; matched = 0; moves = 0; locked = false; started = false;
+  document.getElementById("moves").textContent = 0;
+  document.getElementById("timer").textContent = "0:00";
+  document.getElementById("win-overlay").classList.remove("show");
+
+  const diff = document.getElementById("difficulty").value;
+  const { cols, rows } = CONFIGS[diff];
+  totalPairs = (cols * rows) / 2;
+  document.getElementById("total-pairs").textContent = totalPairs;
+  document.getElementById("pairs").textContent = 0;
+
+  const emojis = EMOJIS.slice(0, totalPairs);
+  let pool = [...emojis, ...emojis];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  const grid = document.getElementById("grid");
+  grid.style.gridTemplateColumns = `repeat(${cols}, 72px)`;
+  grid.innerHTML = "";
+
+  pool.forEach((emoji, idx) => {
+    const wrap = document.createElement("div");
+    wrap.className = "card-wrap";
+    wrap.dataset.idx = idx;
+    wrap.dataset.emoji = emoji;
+    wrap.innerHTML = `
+      <div class="card-inner">
+        <div class="card-face card-back"></div>
+        <div class="card-face card-front">${emoji}</div>
+      </div>`;
+    wrap.addEventListener("click", () => flipCard(wrap));
+    grid.appendChild(wrap);
+  });
+}
+
+function flipCard(card) {
+  if (locked || card.classList.contains("flipped") || card.classList.contains("matched")) return;
+  startTimer();
+  card.classList.add("flipped");
+  flipped.push(card);
+  if (flipped.length === 2) {
+    moves++;
+    document.getElementById("moves").textContent = moves;
+    locked = true;
+    checkMatch();
+  }
+}
+
+function checkMatch() {
+  const [a, b] = flipped;
+  if (a.dataset.emoji === b.dataset.emoji) {
+    a.classList.add("matched");
+    b.classList.add("matched");
+    matched++;
+    document.getElementById("pairs").textContent = matched;
+    flipped = [];
+    locked = false;
+    if (matched === totalPairs) {
+      clearInterval(timerInterval);
+      const time = formatTime();
+      document.getElementById("win-stats").textContent =
+        `Solved in ${moves} moves · ${time}`;
+      setTimeout(() => document.getElementById("win-overlay").classList.add("show"), 400);
+    }
+  } else {
+    setTimeout(() => {
+      a.classList.remove("flipped");
+      b.classList.remove("flipped");
+      flipped = [];
+      locked = false;
+    }, 900);
+  }
+}
+
+document.getElementById("new-btn").addEventListener("click", init);
+document.getElementById("win-new-btn").addEventListener("click", init);
+
+init();
+</script>
+</body>
+</html>
