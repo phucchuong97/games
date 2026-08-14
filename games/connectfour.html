@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Four</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+a.back { position: fixed; top: 12px; left: 12px; color: #94a3b8; text-decoration: none; font-size: 13px; }
+a.back:hover { color: #e0e0e0; }
+
+/* Overlay */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.82);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.panel {
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 12px;
+  padding: 40px 48px;
+  text-align: center;
+  min-width: 280px;
+}
+.panel h2 { font-size: 28px; margin-bottom: 8px; color: #4ade80; letter-spacing: 2px; }
+.panel p { color: #94a3b8; margin-bottom: 24px; font-size: 14px; }
+.panel .big { font-size: 20px; color: #e0e0e0; margin-bottom: 8px; }
+button.btn {
+  background: #4ade80; color: #16213e; font-weight: bold;
+  border: none; border-radius: 6px; padding: 10px 28px;
+  font-size: 16px; cursor: pointer; transition: background 0.15s;
+}
+button.btn:hover { background: #22c55e; }
+
+/* Score bar */
+#scorebar {
+  display: flex; align-items: center; gap: 24px;
+  margin-bottom: 16px; font-size: 15px;
+}
+.score-box {
+  background: #16213e; border: 1px solid #0f3460;
+  border-radius: 8px; padding: 8px 18px; text-align: center;
+}
+.score-box .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+.score-box .num { font-size: 22px; font-weight: bold; }
+.score-you .num { color: #fbbf24; }
+.score-ai .num { color: #f87171; }
+#turn-indicator {
+  font-size: 14px; color: #94a3b8; min-width: 100px; text-align: center;
+}
+
+/* Board wrapper */
+#board-area { position: relative; }
+
+/* Column hover zones */
+#hover-row {
+  display: grid; grid-template-columns: repeat(7, 64px);
+  gap: 6px; padding: 0 6px; margin-bottom: 4px;
+}
+.hover-cell {
+  width: 64px; height: 20px; border-radius: 4px;
+  cursor: pointer; transition: background 0.1s;
+}
+.hover-cell.active { background: rgba(255,255,255,0.12); }
+
+/* Board */
+#board {
+  background: #0f3460;
+  border: 3px solid #0f3460;
+  border-radius: 12px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(7, 64px);
+  grid-template-rows: repeat(6, 64px);
+  gap: 6px;
+  cursor: pointer;
+}
+.cell {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: #0f1f3d;
+  transition: background 0.12s;
+  position: relative; overflow: hidden;
+}
+.cell.p1 { background: #fbbf24; }
+.cell.p2 { background: #f87171; }
+.cell.win-highlight {
+  box-shadow: 0 0 0 4px #fff, 0 0 16px 4px rgba(255,255,255,0.5);
+}
+
+/* Drop animation */
+@keyframes dropIn {
+  from { transform: translateY(-400px); }
+  to   { transform: translateY(0); }
+}
+.cell.animate { animation: dropIn 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+
+/* Buttons row */
+#controls { display: flex; gap: 12px; margin-top: 16px; }
+button.btn-sm {
+  background: #4ade80; color: #16213e; font-weight: bold;
+  border: none; border-radius: 6px; padding: 8px 20px;
+  font-size: 14px; cursor: pointer; transition: background 0.15s;
+}
+button.btn-sm:hover { background: #22c55e; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Back</a>
+
+<!-- Start overlay -->
+<div id="overlay">
+  <div class="panel">
+    <h2>CONNECT FOUR</h2>
+    <p>Drop discs to connect 4 in a row.<br>You are <span style="color:#fbbf24">Yellow</span>, AI is <span style="color:#f87171">Red</span>.</p>
+    <button class="btn" onclick="startGame()">Start Game</button>
+  </div>
+</div>
+
+<!-- Score -->
+<div id="scorebar">
+  <div class="score-box score-you">
+    <div class="label">You</div>
+    <div class="num" id="score-you">0</div>
+  </div>
+  <div id="turn-indicator">Your turn</div>
+  <div class="score-box score-ai">
+    <div class="label">AI</div>
+    <div class="num" id="score-ai">0</div>
+  </div>
+</div>
+
+<!-- Board -->
+<div id="board-area">
+  <div id="hover-row">
+    <div class="hover-cell" data-col="0"></div>
+    <div class="hover-cell" data-col="1"></div>
+    <div class="hover-cell" data-col="2"></div>
+    <div class="hover-cell" data-col="3"></div>
+    <div class="hover-cell" data-col="4"></div>
+    <div class="hover-cell" data-col="5"></div>
+    <div class="hover-cell" data-col="6"></div>
+  </div>
+  <div id="board"></div>
+</div>
+
+<div id="controls">
+  <button class="btn-sm" onclick="newGame()">New Game</button>
+</div>
+
+<script>
+const ROWS = 6, COLS = 7;
+let grid, gameOver, aiThinking;
+let scores = { you: 0, ai: 0 };
+let hoverCol = -1;
+
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  newGame();
+}
+
+function newGame() {
+  grid = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+  gameOver = false;
+  aiThinking = false;
+  hoverCol = -1;
+  renderBoard();
+  updateTurnIndicator('your');
+  clearHover();
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      if (grid[r][c] === 1) cell.classList.add('p1');
+      else if (grid[r][c] === 2) cell.classList.add('p2');
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      board.appendChild(cell);
+    }
+  }
+}
+
+function getCell(r, c) {
+  return document.querySelector(`#board .cell[data-row="${r}"][data-col="${c}"]`);
+}
+
+function updateTurnIndicator(whose) {
+  const el = document.getElementById('turn-indicator');
+  if (whose === 'your') { el.textContent = 'Your turn'; el.style.color = '#fbbf24'; }
+  else if (whose === 'ai') { el.textContent = "AI thinking…"; el.style.color = '#f87171'; }
+  else { el.textContent = ''; el.style.color = '#94a3b8'; }
+}
+
+function clearHover() {
+  document.querySelectorAll('.hover-cell').forEach(h => h.classList.remove('active'));
+}
+
+// Hover events
+document.getElementById('hover-row').addEventListener('mouseover', e => {
+  if (gameOver || aiThinking) return;
+  const cell = e.target.closest('.hover-cell');
+  if (!cell) return;
+  clearHover();
+  const col = +cell.dataset.col;
+  hoverCol = col;
+  cell.classList.add('active');
+});
+document.getElementById('hover-row').addEventListener('mouseleave', () => {
+  hoverCol = -1;
+  clearHover();
+});
+
+document.getElementById('board').addEventListener('mouseover', e => {
+  if (gameOver || aiThinking) return;
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  const col = +cell.dataset.col;
+  clearHover();
+  const hc = document.querySelector(`.hover-cell[data-col="${col}"]`);
+  if (hc) hc.classList.add('active');
+});
+document.getElementById('board').addEventListener('mouseleave', () => {
+  clearHover();
+});
+
+// Click to drop
+document.getElementById('board').addEventListener('click', e => {
+  if (gameOver || aiThinking) return;
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  const col = +cell.dataset.col;
+  playerDrop(col);
+});
+document.getElementById('hover-row').addEventListener('click', e => {
+  if (gameOver || aiThinking) return;
+  const cell = e.target.closest('.hover-cell');
+  if (!cell) return;
+  playerDrop(+cell.dataset.col);
+});
+
+function playerDrop(col) {
+  const row = dropRow(grid, col);
+  if (row === -1) return;
+  grid[row][col] = 1;
+  animateDrop(row, col, 'p1');
+  const win = checkWin(grid, row, col, 1);
+  if (win) {
+    highlightWin(win);
+    gameOver = true;
+    scores.you++;
+    document.getElementById('score-you').textContent = scores.you;
+    updateTurnIndicator('');
+    setTimeout(() => showEndOverlay('You win! 🎉', false), 600);
+    return;
+  }
+  if (isFull(grid)) {
+    gameOver = true;
+    updateTurnIndicator('');
+    setTimeout(() => showEndOverlay('Draw!', false), 400);
+    return;
+  }
+  updateTurnIndicator('ai');
+  aiThinking = true;
+  clearHover();
+  setTimeout(aiTurn, 400);
+}
+
+function aiTurn() {
+  const col = bestMove(grid);
+  const row = dropRow(grid, col);
+  grid[row][col] = 2;
+  animateDrop(row, col, 'p2');
+  const win = checkWin(grid, row, col, 2);
+  if (win) {
+    highlightWin(win);
+    gameOver = true;
+    scores.ai++;
+    document.getElementById('score-ai').textContent = scores.ai;
+    updateTurnIndicator('');
+    setTimeout(() => showEndOverlay('AI wins!', false), 600);
+    aiThinking = false;
+    return;
+  }
+  if (isFull(grid)) {
+    gameOver = true;
+    updateTurnIndicator('');
+    setTimeout(() => showEndOverlay('Draw!', false), 400);
+    aiThinking = false;
+    return;
+  }
+  aiThinking = false;
+  updateTurnIndicator('your');
+}
+
+function animateDrop(row, col, cls) {
+  const cell = getCell(row, col);
+  if (!cell) return;
+  cell.classList.add(cls, 'animate');
+  cell.addEventListener('animationend', () => cell.classList.remove('animate'), { once: true });
+}
+
+function highlightWin(cells) {
+  cells.forEach(([r, c]) => {
+    const cell = getCell(r, c);
+    if (cell) cell.classList.add('win-highlight');
+  });
+}
+
+function showEndOverlay(msg, _) {
+  const ov = document.getElementById('overlay');
+  ov.style.display = 'flex';
+  ov.innerHTML = `<div class="panel">
+    <h2>${msg}</h2>
+    <p style="margin-bottom:24px;color:#94a3b8">Score — You: ${scores.you} | AI: ${scores.ai}</p>
+    <button class="btn" onclick="startNewRound()">Play Again</button>
+  </div>`;
+}
+
+function startNewRound() {
+  document.getElementById('overlay').style.display = 'none';
+  newGame();
+}
+
+// --- Game logic ---
+function dropRow(g, col) {
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (g[r][col] === 0) return r;
+  }
+  return -1;
+}
+
+function isFull(g) {
+  return g[0].every(v => v !== 0);
+}
+
+function checkWin(g, row, col, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr, dc] of dirs) {
+    const cells = [[row, col]];
+    for (let d = 1; d <= 3; d++) {
+      const r = row + dr*d, c = col + dc*d;
+      if (r<0||r>=ROWS||c<0||c>=COLS||g[r][c]!==player) break;
+      cells.push([r, c]);
+    }
+    for (let d = 1; d <= 3; d++) {
+      const r = row - dr*d, c = col - dc*d;
+      if (r<0||r>=ROWS||c<0||c>=COLS||g[r][c]!==player) break;
+      cells.push([r, c]);
+    }
+    if (cells.length >= 4) return cells.slice(0, 4);
+  }
+  return null;
+}
+
+// --- Minimax AI ---
+function bestMove(g) {
+  let best = -Infinity, bestCol = 3;
+  const cols = [3,2,4,1,5,0,6];
+  let alpha = -Infinity, beta = Infinity;
+  for (const c of cols) {
+    const r = dropRow(g, c);
+    if (r === -1) continue;
+    g[r][c] = 2;
+    const score = minimax(g, 4, false, alpha, beta, r, c);
+    g[r][c] = 0;
+    if (score > best) { best = score; bestCol = c; }
+    alpha = Math.max(alpha, best);
+  }
+  return bestCol;
+}
+
+function minimax(g, depth, maximizing, alpha, beta, lastR, lastC) {
+  const lastPlayer = maximizing ? 1 : 2;
+  if (checkWin(g, lastR, lastC, lastPlayer)) return maximizing ? -100000 : 100000;
+  if (isFull(g) || depth === 0) return evalBoard(g);
+
+  const cols = [3,2,4,1,5,0,6];
+  if (maximizing) {
+    let best = -Infinity;
+    for (const c of cols) {
+      const r = dropRow(g, c);
+      if (r === -1) continue;
+      g[r][c] = 2;
+      best = Math.max(best, minimax(g, depth-1, false, alpha, beta, r, c));
+      g[r][c] = 0;
+      alpha = Math.max(alpha, best);
+      if (alpha >= beta) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const c of cols) {
+      const r = dropRow(g, c);
+      if (r === -1) continue;
+      g[r][c] = 1;
+      best = Math.min(best, minimax(g, depth-1, true, alpha, beta, r, c));
+      g[r][c] = 0;
+      beta = Math.min(beta, best);
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+}
+
+function scoreWindow(window, player) {
+  const opp = player === 2 ? 1 : 2;
+  const count = window.filter(v => v === player).length;
+  const empty = window.filter(v => v === 0).length;
+  const oppCount = window.filter(v => v === opp).length;
+  if (oppCount > 0) return 0;
+  if (count === 4) return 100;
+  if (count === 3 && empty === 1) return 5;
+  if (count === 2 && empty === 2) return 2;
+  return 0;
+}
+
+function evalBoard(g) {
+  let score = 0;
+  // Center column preference
+  const centerCol = 3;
+  for (let r = 0; r < ROWS; r++) {
+    if (g[r][centerCol] === 2) score += 3;
+    else if (g[r][centerCol] === 1) score -= 3;
+  }
+  // Horizontal
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c <= COLS-4; c++) {
+      const w = [g[r][c], g[r][c+1], g[r][c+2], g[r][c+3]];
+      score += scoreWindow(w, 2) - scoreWindow(w, 1);
+    }
+  }
+  // Vertical
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r <= ROWS-4; r++) {
+      const w = [g[r][c], g[r+1][c], g[r+2][c], g[r+3][c]];
+      score += scoreWindow(w, 2) - scoreWindow(w, 1);
+    }
+  }
+  // Diagonal /
+  for (let r = 3; r < ROWS; r++) {
+    for (let c = 0; c <= COLS-4; c++) {
+      const w = [g[r][c], g[r-1][c+1], g[r-2][c+2], g[r-3][c+3]];
+      score += scoreWindow(w, 2) - scoreWindow(w, 1);
+    }
+  }
+  // Diagonal \
+  for (let r = 0; r <= ROWS-4; r++) {
+    for (let c = 0; c <= COLS-4; c++) {
+      const w = [g[r][c], g[r+1][c+1], g[r+2][c+2], g[r+3][c+3]];
+      score += scoreWindow(w, 2) - scoreWindow(w, 1);
+    }
+  }
+  return score;
+}
+</script>
+</body>
+</html>

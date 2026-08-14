@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>War</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  background: #1a1a2e; color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  padding: 20px 12px 40px; gap: 12px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 3px; font-size: 26px; }
+
+#stats-bar {
+  display: flex; gap: 20px; font-size: 13px; color: #94a3b8; flex-wrap: wrap; justify-content: center;
+}
+#stats-bar b { color: #e0e0e0; }
+
+#table {
+  width: 100%; max-width: 560px;
+  background: #16213e; border: 2px solid #0f3460;
+  border-radius: 16px; padding: 18px;
+  display: flex; flex-direction: column; gap: 14px; align-items: center;
+}
+
+.player-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+.deck-count { font-size: 28px; font-weight: bold; color: #4ade80; text-align: center; line-height: 1; }
+.deck-count.low { color: #f87171; }
+.deck-sub { font-size: 12px; color: #64748b; text-align: center; }
+
+/* Card */
+.card {
+  width: 66px; height: 94px;
+  background: #fff; border-radius: 8px;
+  display: flex; flex-direction: column;
+  justify-content: space-between;
+  padding: 5px 6px; font-weight: bold;
+  font-size: 14px; color: #1f2937;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  user-select: none; flex-shrink: 0;
+}
+.card.red { color: #dc2626; }
+.card.back {
+  background: linear-gradient(135deg, #1e3a5f, #0f3460);
+  border: 2px solid #4ade80;
+}
+.card .top { font-size: 13px; }
+.card .mid { position: relative; flex: 1 1 auto; margin: 1px 0; }
+.card .mid .pip { position: absolute; transform: translate(-50%, -50%); font-size: 11px; line-height: 1; }
+.card .mid .pip.flip { transform: translate(-50%, -50%) rotate(180deg); }
+.card .mid .big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.card .mid .face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.card .mid .face small { font-size: 0.6em; margin-left: 1px; }
+.card .bot { font-size: 13px; text-align: right; transform: rotate(180deg); }
+.card-placeholder {
+  width: 66px; height: 94px;
+  border: 2px dashed #0f3460; border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* Battle area */
+#battle-area {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center;
+  min-height: 110px;
+}
+#player-card-area, #cpu-card-area {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+#vs-area {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 60px;
+}
+#vs-label { font-size: 20px; font-weight: bold; color: #0f3460; }
+
+/* War cards */
+#war-area {
+  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  min-height: 0; overflow: hidden;
+  transition: all 0.3s;
+}
+.war-card-stack {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.war-label { font-size: 10px; color: #f87171; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
+
+/* Result */
+#result-area {
+  text-align: center; min-height: 32px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+#result-msg {
+  font-size: 22px; font-weight: bold; color: #4ade80;
+}
+#result-msg.lose { color: #f87171; }
+#result-msg.war { color: #f59e0b; }
+#pot-msg { font-size: 13px; color: #94a3b8; }
+
+hr { border: none; border-top: 1px solid #0f3460; width: 100%; margin: 0; }
+
+/* Controls */
+#controls { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+#mode-row { display: flex; gap: 10px; }
+button.btn {
+  background: #4ade80; color: #16213e; border: none;
+  padding: 10px 22px; font-size: 15px; font-weight: bold;
+  border-radius: 6px; cursor: pointer;
+}
+button.btn:hover { background: #22c55e; }
+button.btn:disabled { background: #374151; color: #6b7280; cursor: default; }
+button.btn.secondary { background: #374151; color: #e0e0e0; }
+button.btn.secondary:hover { background: #4b5563; }
+button.btn.active { background: #22c55e; }
+
+/* Deck piles row */
+#piles-row {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; gap: 10px;
+}
+.pile-box { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.pile-bar {
+  width: 100%; height: 12px; background: #0f3460; border-radius: 6px; overflow: hidden;
+}
+.pile-fill { height: 100%; background: #4ade80; border-radius: 6px; transition: width 0.4s; }
+.pile-fill.low { background: #f87171; }
+
+/* Slide animations */
+@keyframes slide-up {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.card.slide-up { animation: slide-up 0.3s ease; }
+
+/* Overlay */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,10,20,0.92);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; z-index: 100;
+}
+#overlay h2 { color: #4ade80; font-size: 32px; margin: 0; letter-spacing: 3px; }
+#overlay p { color: #94a3b8; margin: 0; font-size: 14px; text-align: center; max-width: 340px; }
+
+/* Win screen */
+#win-screen {
+  display: none; position: fixed; inset: 0;
+  background: rgba(10,10,20,0.95);
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; z-index: 100;
+}
+#win-screen.show { display: flex; }
+#win-title { font-size: 36px; font-weight: bold; }
+#win-title.win { color: #4ade80; }
+#win-title.lose { color: #f87171; }
+#win-stats { color: #94a3b8; font-size: 14px; text-align: center; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>WAR</h1>
+<div id="stats-bar">
+  <span>Rounds: <b id="stat-rounds">0</b></span>
+  <span>Wars: <b id="stat-wars">0</b></span>
+</div>
+
+<div id="table">
+  <!-- CPU pile info -->
+  <div class="pile-box" style="width:100%">
+    <div class="player-label">CPU</div>
+    <div class="deck-count" id="cpu-count">26</div>
+    <div class="deck-sub">cards</div>
+    <div class="pile-bar"><div class="pile-fill" id="cpu-bar" style="width:50%"></div></div>
+  </div>
+
+  <hr>
+
+  <!-- Battle area -->
+  <div id="war-area"></div>
+  <div id="battle-area">
+    <div id="cpu-card-area">
+      <div id="cpu-card"></div>
+    </div>
+    <div id="vs-area">
+      <div id="vs-label">VS</div>
+    </div>
+    <div id="player-card-area">
+      <div id="player-card"></div>
+    </div>
+  </div>
+
+  <div id="result-area">
+    <div id="result-msg"></div>
+    <div id="pot-msg"></div>
+  </div>
+
+  <hr>
+
+  <!-- Player pile info -->
+  <div class="pile-box" style="width:100%">
+    <div class="pile-bar"><div class="pile-fill" id="player-bar" style="width:50%"></div></div>
+    <div class="deck-count" id="player-count">26</div>
+    <div class="deck-sub">cards</div>
+    <div class="player-label">You</div>
+  </div>
+
+  <div id="controls">
+    <div id="mode-row">
+      <button class="btn secondary active" id="mode-manual">Manual</button>
+      <button class="btn secondary" id="mode-auto">Auto</button>
+    </div>
+    <button class="btn" id="flip-btn">Flip Cards</button>
+  </div>
+</div>
+
+<!-- Start overlay -->
+<div id="overlay">
+  <h2>WAR</h2>
+  <p>Classic card game · 52 cards split evenly<br>Higher card wins the round · Tie = WAR!<br>Run your opponent out of cards to win!</p>
+  <button class="btn" id="start-btn">Start Game</button>
+</div>
+
+<!-- Win screen -->
+<div id="win-screen">
+  <div id="win-title">You Win!</div>
+  <div id="win-stats"></div>
+  <button class="btn" id="play-again-btn">Play Again</button>
+</div>
+
+<script>
+const SUITS = ["♠","♥","♦","♣"];
+const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+const RANK_VAL = Object.fromEntries(RANKS.map((r,i) => [r, i+2]));
+
+// Traditional pip layouts for number cards: [x%, y%] within the card's middle band
+const PIP_L = 26, PIP_C = 50, PIP_R = 74;
+const PIP_LAYOUTS = {
+  "2":  [[PIP_C,16],[PIP_C,84]],
+  "3":  [[PIP_C,16],[PIP_C,50],[PIP_C,84]],
+  "4":  [[PIP_L,16],[PIP_R,16],[PIP_L,84],[PIP_R,84]],
+  "5":  [[PIP_L,16],[PIP_R,16],[PIP_C,50],[PIP_L,84],[PIP_R,84]],
+  "6":  [[PIP_L,16],[PIP_R,16],[PIP_L,50],[PIP_R,50],[PIP_L,84],[PIP_R,84]],
+  "7":  [[PIP_L,16],[PIP_R,16],[PIP_C,33],[PIP_L,50],[PIP_R,50],[PIP_L,84],[PIP_R,84]],
+  "8":  [[PIP_L,16],[PIP_R,16],[PIP_C,33],[PIP_L,50],[PIP_R,50],[PIP_C,67],[PIP_L,84],[PIP_R,84]],
+  "9":  [[PIP_L,14],[PIP_R,14],[PIP_L,38],[PIP_R,38],[PIP_C,50],[PIP_L,62],[PIP_R,62],[PIP_L,86],[PIP_R,86]],
+  "10": [[PIP_L,14],[PIP_R,14],[PIP_C,26],[PIP_L,38],[PIP_R,38],[PIP_L,62],[PIP_R,62],[PIP_C,74],[PIP_L,86],[PIP_R,86]],
+};
+function pipFace(rank, suit) {
+  if (rank === "A") return `<div class="big">${suit}</div>`;
+  if (rank === "J" || rank === "Q" || rank === "K")
+    return `<div class="face">${rank}<small>${suit}</small></div>`;
+  const lay = PIP_LAYOUTS[rank];
+  if (!lay) return `<div class="big">${suit}</div>`;
+  return lay.map(([x, y]) =>
+    `<span class="pip${y > 50 ? " flip" : ""}" style="left:${x}%;top:${y}%">${suit}</span>`
+  ).join("");
+}
+const RED = new Set(["♥","♦"]);
+
+let playerDeck, cpuDeck;
+let roundsPlayed, warsTriggered;
+let autoMode, autoTimer;
+let gameOver;
+
+function buildDeck() {
+  const d = [];
+  for (const s of SUITS) for (const r of RANKS) d.push({s,r});
+  for (let i = d.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [d[i],d[j]] = [d[j],d[i]];
+  }
+  return d;
+}
+
+function initGame() {
+  const full = buildDeck();
+  playerDeck = full.slice(0, 26);
+  cpuDeck = full.slice(26);
+  roundsPlayed = 0;
+  warsTriggered = 0;
+  gameOver = false;
+  autoMode = false;
+  clearAuto();
+
+  updateCounts();
+  clearBattle();
+  setResult("", "");
+  document.getElementById("flip-btn").disabled = false;
+  document.getElementById("stat-rounds").textContent = 0;
+  document.getElementById("stat-wars").textContent = 0;
+}
+
+function makeCardEl(card, hidden, anim) {
+  const el = document.createElement("div");
+  if (hidden) {
+    el.className = "card back" + (anim ? " slide-up" : "");
+    return el;
+  }
+  el.className = "card" + (RED.has(card.s) ? " red" : "") + (anim ? " slide-up" : "");
+  el.innerHTML = `<div class="top">${card.r}${card.s}</div><div class="mid">${pipFace(card.r, card.s)}</div><div class="bot">${card.r}${card.s}</div>`;
+  return el;
+}
+
+function clearBattle() {
+  document.getElementById("player-card").innerHTML = "";
+  document.getElementById("cpu-card").innerHTML = "";
+  document.getElementById("war-area").innerHTML = "";
+  document.getElementById("vs-label").textContent = "VS";
+  document.getElementById("pot-msg").textContent = "";
+}
+
+function setResult(msg, cls) {
+  const el = document.getElementById("result-msg");
+  el.textContent = msg;
+  el.className = cls;
+}
+
+function updateCounts() {
+  const pc = playerDeck.length;
+  const cc = cpuDeck.length;
+  document.getElementById("player-count").textContent = pc;
+  document.getElementById("cpu-count").textContent = cc;
+  document.getElementById("player-count").className = "deck-count" + (pc <= 5 ? " low" : "");
+  document.getElementById("cpu-count").className = "deck-count" + (cc <= 5 ? " low" : "");
+  const total = pc + cc;
+  const pPct = total > 0 ? (pc/total)*100 : 0;
+  const cPct = total > 0 ? (cc/total)*100 : 0;
+  const pBar = document.getElementById("player-bar");
+  const cBar = document.getElementById("cpu-bar");
+  pBar.style.width = pPct + "%";
+  cBar.style.width = cPct + "%";
+  pBar.className = "pile-fill" + (pc <= 5 ? " low" : "");
+  cBar.className = "pile-fill" + (cc <= 5 ? " low" : "");
+}
+
+function flipRound() {
+  if (gameOver) return;
+  if (playerDeck.length === 0 || cpuDeck.length === 0) {
+    endGame();
+    return;
+  }
+
+  clearBattle();
+  playRound([], []);
+}
+
+function playRound(warPot, warCards) {
+  const pCard = playerDeck.shift();
+  const cCard = cpuDeck.shift();
+
+  // Display face-up
+  const pArea = document.getElementById("player-card");
+  const cArea = document.getElementById("cpu-card");
+  pArea.innerHTML = "";
+  cArea.innerHTML = "";
+  pArea.appendChild(makeCardEl(pCard, false, true));
+  cArea.appendChild(makeCardEl(cCard, false, true));
+
+  roundsPlayed++;
+  document.getElementById("stat-rounds").textContent = roundsPlayed;
+
+  const allCards = [...warPot, pCard, cCard, ...warCards];
+  const potSize = allCards.length;
+  document.getElementById("pot-msg").textContent = potSize > 2 ? `${potSize} cards in pot` : "";
+
+  const pVal = RANK_VAL[pCard.r];
+  const cVal = RANK_VAL[cCard.r];
+
+  if (pVal > cVal) {
+    // Player wins
+    shuffle(allCards).forEach(c => playerDeck.push(c));
+    updateCounts();
+    setResult("You win!", "win");
+    document.getElementById("vs-label").textContent = "▲";
+  } else if (cVal > pVal) {
+    // CPU wins
+    shuffle(allCards).forEach(c => cpuDeck.push(c));
+    updateCounts();
+    setResult("CPU wins!", "lose");
+    document.getElementById("vs-label").textContent = "▼";
+  } else {
+    // WAR
+    warsTriggered++;
+    document.getElementById("stat-wars").textContent = warsTriggered;
+    setResult("WAR!", "war");
+    document.getElementById("vs-label").textContent = "⚔";
+
+    // Check if either player can war
+    if (playerDeck.length < 4 || cpuDeck.length < 4) {
+      // Can't war — whoever has more cards wins everything
+      if (playerDeck.length >= cpuDeck.length) {
+        shuffle(allCards).forEach(c => playerDeck.push(c));
+        updateCounts();
+        setResult("WAR! (not enough cards — You win pot!)", "win");
+      } else {
+        shuffle(allCards).forEach(c => cpuDeck.push(c));
+        updateCounts();
+        setResult("WAR! (not enough cards — CPU wins pot!)", "lose");
+      }
+      checkGameOver();
+      return;
+    }
+
+    // Draw 3 face-down + display in war area
+    const warArea = document.getElementById("war-area");
+    warArea.innerHTML = "";
+
+    const pWarFaceDown = [playerDeck.shift(), playerDeck.shift(), playerDeck.shift()];
+    const cWarFaceDown = [cpuDeck.shift(), cpuDeck.shift(), cpuDeck.shift()];
+
+    const pStack = document.createElement("div");
+    pStack.className = "war-card-stack";
+    const pWL = document.createElement("div");
+    pWL.className = "war-label";
+    pWL.textContent = "Your war cards";
+    pStack.appendChild(pWL);
+    const pFD = document.createElement("div");
+    pFD.style.display = "flex"; pFD.style.gap = "4px";
+    pWarFaceDown.forEach(() => { const c = makeCardEl(null, true); c.style.width="46px"; c.style.height="66px"; pFD.appendChild(c); });
+    pStack.appendChild(pFD);
+    warArea.appendChild(pStack);
+
+    const cStack = document.createElement("div");
+    cStack.className = "war-card-stack";
+    const cWL = document.createElement("div");
+    cWL.className = "war-label";
+    cWL.textContent = "CPU war cards";
+    cStack.appendChild(cWL);
+    const cFD = document.createElement("div");
+    cFD.style.display = "flex"; cFD.style.gap = "4px";
+    cWarFaceDown.forEach(() => { const c = makeCardEl(null, true); c.style.width="46px"; c.style.height="66px"; cFD.appendChild(c); });
+    cStack.appendChild(cFD);
+    warArea.appendChild(cStack);
+
+    document.getElementById("pot-msg").textContent = `${allCards.length + pWarFaceDown.length + cWarFaceDown.length} cards in war pot`;
+
+    updateCounts();
+
+    // Continue war after brief delay
+    setTimeout(() => {
+      if (playerDeck.length === 0 || cpuDeck.length === 0) {
+        // someone ran out during war draw
+        const combined = [...allCards, ...pWarFaceDown, ...cWarFaceDown];
+        if (playerDeck.length >= cpuDeck.length) {
+          shuffle(combined).forEach(c => playerDeck.push(c));
+          setResult("You win the war pot!", "win");
+        } else {
+          shuffle(combined).forEach(c => cpuDeck.push(c));
+          setResult("CPU wins the war pot!", "lose");
+        }
+        updateCounts();
+        checkGameOver();
+      } else {
+        playRound(allCards, [...pWarFaceDown, ...cWarFaceDown]);
+      }
+    }, autoMode ? 600 : 1200);
+    return;
+  }
+
+  checkGameOver();
+}
+
+function checkGameOver() {
+  if (playerDeck.length === 0 || cpuDeck.length === 0) {
+    setTimeout(endGame, 800);
+  }
+}
+
+function endGame() {
+  gameOver = true;
+  clearAuto();
+  document.getElementById("flip-btn").disabled = true;
+  const won = playerDeck.length > cpuDeck.length;
+  const title = document.getElementById("win-title");
+  title.textContent = won ? "You Win!" : "CPU Wins!";
+  title.className = won ? "win" : "lose";
+  document.getElementById("win-stats").textContent =
+    `Rounds: ${roundsPlayed} · Wars: ${warsTriggered}`;
+  document.getElementById("win-screen").classList.add("show");
+}
+
+function shuffle(arr) {
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function clearAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+
+function setAutoMode(on) {
+  autoMode = on;
+  document.getElementById("mode-manual").classList.toggle("active", !on);
+  document.getElementById("mode-auto").classList.toggle("active", on);
+  document.getElementById("flip-btn").textContent = on ? "Stop Auto" : "Flip Cards";
+  if (on) {
+    autoTimer = setInterval(() => {
+      if (!gameOver) flipRound();
+      else clearAuto();
+    }, 600);
+  } else {
+    clearAuto();
+    document.getElementById("flip-btn").textContent = "Flip Cards";
+  }
+}
+
+document.getElementById("start-btn").addEventListener("click", () => {
+  document.getElementById("overlay").style.display = "none";
+  initGame();
+});
+
+document.getElementById("flip-btn").addEventListener("click", () => {
+  if (autoMode) {
+    setAutoMode(false);
+  } else {
+    flipRound();
+  }
+});
+
+document.getElementById("mode-manual").addEventListener("click", () => setAutoMode(false));
+document.getElementById("mode-auto").addEventListener("click", () => {
+  if (!autoMode) setAutoMode(true);
+});
+
+document.getElementById("play-again-btn").addEventListener("click", () => {
+  document.getElementById("win-screen").classList.remove("show");
+  setAutoMode(false);
+  initGame();
+});
+</script>
+</body>
+</html>

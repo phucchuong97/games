@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boggle</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  padding: 20px 12px 40px;
+  gap: 14px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 3px; font-size: 26px; }
+
+#top-bar {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+#timer { font-size: 22px; font-weight: bold; color: #4ade80; min-width: 48px; text-align: center; }
+#timer.urgent { color: #f87171; }
+#score-display { font-size: 18px; font-weight: bold; color: #e0e0e0; }
+#high-display { font-size: 13px; color: #94a3b8; }
+
+/* Grid */
+#grid-container {
+  display: grid;
+  grid-template-columns: repeat(4, 72px);
+  grid-template-rows: repeat(4, 72px);
+  gap: 6px;
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 12px;
+  padding: 12px;
+}
+.cell {
+  width: 72px; height: 72px;
+  background: #1a1a2e;
+  border: 2px solid #0f3460;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s, border-color 0.1s, color 0.1s, transform 0.1s;
+  color: #e0e0e0;
+  position: relative;
+}
+.cell:hover { border-color: #4ade80; }
+.cell.selected { border-color: #4ade80; color: #16213e; transform: scale(1.05); }
+.cell.adjacent-hint { border-color: #22c55e; opacity: 0.7; }
+.cell .seq-num {
+  position: absolute;
+  top: 3px; right: 5px;
+  font-size: 10px;
+  font-weight: bold;
+  color: rgba(255,255,255,0.6);
+}
+
+/* Input row */
+#input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#word-input {
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px 14px;
+  width: 200px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  outline: none;
+  caret-color: #4ade80;
+}
+#word-input:focus { border-color: #4ade80; }
+#word-input.error { border-color: #f87171; animation: shake 0.3s; }
+#word-input.success { border-color: #4ade80; }
+
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+button {
+  background: #4ade80;
+  color: #16213e;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover { background: #22c55e; }
+button:disabled { background: #94a3b8; cursor: default; }
+#clear-btn { background: #0f3460; color: #94a3b8; }
+#clear-btn:hover { background: #1a3a6e; color: #e0e0e0; }
+
+#error-msg {
+  font-size: 13px;
+  min-height: 18px;
+  color: #f87171;
+  text-align: center;
+}
+
+/* Found words */
+#found-panel {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 10px;
+  padding: 12px 16px;
+  width: 100%;
+  max-width: 400px;
+}
+#found-panel h3 { margin: 0 0 8px; font-size: 14px; color: #94a3b8; }
+#found-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.found-word {
+  background: #0f3460;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #4ade80;
+  font-weight: bold;
+}
+.found-word .pts { color: #94a3b8; font-size: 10px; margin-left: 3px; }
+
+/* Overlay */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,10,20,0.9);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+#overlay-box {
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 14px;
+  padding: 36px 40px;
+  text-align: center;
+  max-width: 460px;
+  width: 92%;
+}
+#overlay-box h2 { margin: 0 0 6px; color: #4ade80; font-size: 22px; letter-spacing: 2px; }
+#overlay-box .sub { color: #94a3b8; margin: 0 0 24px; font-size: 14px; }
+#overlay-btn { padding: 12px 32px; font-size: 15px; }
+#end-stats { margin-bottom: 20px; }
+#end-stats .stat { margin: 6px 0; font-size: 15px; }
+#end-stats .stat span { color: #4ade80; font-weight: bold; }
+#missed-words {
+  text-align: left;
+  background: #0f3460;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+#missed-words h4 { margin: 0 0 6px; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+#missed-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.missed-word { color: #f87171; font-size: 12px; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>BOGGLE</h1>
+<div id="top-bar">
+  <div>Time: <span id="timer">3:00</span></div>
+  <div>Score: <span id="score-display">0</span></div>
+  <div id="high-display">Best: <span id="high-val">0</span></div>
+</div>
+
+<div id="grid-container"></div>
+
+<div id="input-row">
+  <input id="word-input" type="text" placeholder="TYPE WORD" maxlength="16" autocomplete="off" spellcheck="false"/>
+  <button id="submit-btn">Submit</button>
+  <button id="clear-btn">Clear</button>
+</div>
+<div id="error-msg"></div>
+
+<div id="found-panel">
+  <h3>Found Words (<span id="found-count">0</span>)</h3>
+  <div id="found-list"></div>
+</div>
+
+<!-- Start / End overlay -->
+<div id="overlay">
+  <div id="overlay-box">
+    <h2>BOGGLE</h2>
+    <p class="sub">Find words in the 4×4 grid.<br>Connect adjacent letters (including diagonals).<br>Min 3 letters. 3 minutes. Good luck!</p>
+    <div id="end-stats" style="display:none"></div>
+    <div id="missed-words" style="display:none">
+      <h4>Best words you missed</h4>
+      <div id="missed-list"></div>
+    </div>
+    <div style="margin-bottom:16px; font-size:13px; color:#94a3b8;">
+      <strong style="color:#e0e0e0;">Scoring:</strong> 3–4 letters = 1pt &nbsp;|&nbsp; 5 = 2pt &nbsp;|&nbsp; 6 = 3pt &nbsp;|&nbsp; 7 = 5pt &nbsp;|&nbsp; 8+ = 11pt
+    </div>
+    <button id="overlay-btn">New Game</button>
+  </div>
+</div>
+
+<script>
+// ---- Word List (common English words, Boggle-friendly) ----
+const WORD_LIST_RAW = `ace act add age ago aid aim air ale all amp ant ape arc are ark arm art ash ask asp ate awe axe aye
+baa bad bag ban bar bat bay bed beg bid big bin bit boo bow box boy bun bus but buy
+cab can cap car cat cob cod cog cop cot cow cry cub cup cut
+dab dad dam dew did dig dim dip doe dog dot dry dub dud due dug dun dye
+ear eat eel egg ego elk elm end era eve ewe eye
+fad fan far fat fax fee few fib fig fin fit fix foe fog for fox fur
+gag gap gas gel gem get gin gnu god got gum gun gut guy gym
+had hag ham hap has hat hay hem hen hew hid him hip his hit hob hoe hog hop hot how hub hue hug hum
+ice icy ill imp ink inn ion ire ivy
+jab jag jam jar jaw jay jet jig job jog jot joy jug jut
+keg kin kit
+lab lad lag lap law lax lay lea led leg let lid lip lit log lot low lug
+mad man map mar mat maw mix mob mod mop mow mud mug mum
+nab nag nap net new nib nil nit nod nor not now nun
+oak oar odd off oil old one opt orb ore our out owe owl own
+pan pap par pat paw pay pea peg pen pep pet pew pie pig pin pip pit ply pod pop pot pox pro pry pub pug pun pup put
+rag ram ran rap raw ray rib rid rip rob rod roe rot row rub rug rum run rut rye
+sad sag sap sat saw say sea set sew she shy sin sip sir sis sit ski sky sly sob sod son sop sow spa spy sty sub sue sum sun sup
+tab tan tap tar tat tax tea ten the thy tie til tin tip toe top tow toy try tub tug tun two
+ugh urn use
+van vat vet vow
+wad wag war was wax way web wed wig win wit woe wok won woo wow
+yam yap yaw yep yet you
+zap zed zip zoo
+able aced aces ache acid acre aged ages ague ahem aids aims ails aims airs ajar aloe also alto alum amok amps ankh ante ants apes apex arch arcs area ares aria arid arms army arty ashy asks atom atop aunt auto aver avid avow awed awes axes
+babe back bail bait bake bale ball balm band bane bang bank bare bark barn base bash bask bass bath baud bawl bead beak beam bean bear beat been beef been beer bees beet bell belt bend best beta bite blow blue blur boar boat body bold bolt bomb bond bone book boom boon bore boss both brag bran brew brick brig brim brow buff bulk bull bump bunk bunt burp burr buzz
+cafe cage call came camp cane cape card care carp cart case cash cast cave cell chad chai chap char chat chew chic chin chip chop clad clan clap claw clay clip clod clog clot club clue coal coat code coil cola cold come cone cone cook cool cope cord core cork corn cost coup cozy crab cram crew crop crow crux cube cure curl
+dale damp dare dark dart date dawn days daze dead deaf deal dear deck deed deem deep deer deft deny desk dew dial dice dike dill dint dire dirt disk dive dock does dole dome done dose dote dote dove down doze drab drag draw drew drip drop drum dual duke dull dune dupe dust duty
+each earl earn ease east easy edge eels efface else emit envy epic even ever evil exam exes exit expo eyed eyes
+face fact fail fair fall fame fang fare farm fast fate faun fawn faze fern fest feud fief file fill film find fine fire fish fist five flag flak flan flap flat flaw flax flea fled flit flop flow flue flux foam foil folk fond font ford fore fork form fort foul four fowl fray free fret from fuel full fume fund funk
+gait gale gall game gash gate gave gaze gear geld germ gild gill gist give glad glee glib glob glue glut gnaw goad goat goes gold golf gone goof gory gown grab gram gray grew grid grin grip grit grow grub gulf gull gulp gust
+hack hail hair hale hall halt hams hand hang hard hare hark harm harp hart hate haul have hawk haze head heal heap hear heel heft held helm help herb here hero hide high hill hilt hind hint hire hive hoar hoax hock hold hole holy home hone hood hoof hook hoop hope horn hose husk
+idle jack jade jail jake jamb jape jest jibe jilt jive jolt joust jump junk just keen keep kelp kern kind king kink knob knot know
+lace lack laid lame lane lark lash lass last late laud lawn laze lazy lead leaf lean leas leer lend lens liar lick like lime limp line ling link lion lire list live load loan lobe loch lock lode loft logo lone long look loom loon loop lore lore lose loss lost love lull lump lung lure lurk
+mace made mail main make male mall malt mane many mare mark mart mash mask mast mate maze meal mean meat meet meld melt memo mend menu mere mesh mess mice mike mild mile mill mime mind mine mire mist moat mode mole molt moon moor more most move much muse musk must mute myriad
+nail name nape near neat neck need neon nest news next nice nick nigh norm nose note noun
+oaks oafs oath oboe odds odor omen once only onto open oral ores orgy otto ouze over owed owes owns
+pace pack pail pain pair pale palm pane pang park pare past path pave pawl peal pear peat peel peen peer pelt pend perk pest pick pile pill pine pink pint pipe plan play plea plot plod plow ploy plum pod pole poll polo pond poof pool poor pope pork port pose post pour pout pray prep prey prim prod prop prow pull pulp pump pure push
+race rack rage raid rain rake ramp rang rank rant rape rare rash rate rave read real ream reap reed reel rein rely rend rent ripe rise risk rite road roam roar robe rock rode role roll roof room root rope rose rote rout rove rude ruff rule rump rune ruse rush rust
+sage sail salt same sane sang sank sash save scab scam scar scat scud seal seam seep self sell semi send sent shed ship shoe shop shore shot show sick side sift sigh silk sill silt sine sing sink sire site size skew skin skip slab slag slam slap slat slew slim slip slob slop slot slow slug slum slur snap snag snip snob snot snow snub sock sofa soil sole soma some song soon sore sort soul soup sour span spar spat spec sped spin spit spot spud spur stab stag star stay stem step stew stir stop story stub stud stun such sued suit sung sunk sure surf swan swam swap swat sway swum sync
+tack tail take tale tall tame tang tank tape tare task test text than that them then they thin this thus tick tide tied tier tile till time tire toad toil toll tomb tong tool torn toss tour tow tofu trim trio trip trod true tuck tuft tune turf turn twin twit type
+ugly ulna undo unit upon urge used uses
+vale vane vary vase vast vein verb very vest view vile vine vise
+wade wake wale walk wall wand wane ward ware warm warn warp wart wavy weak weal wean wear weed week weld well wend went were west whim whip whiz wick wide wife wild will wilt wind wine wing wink wisp with wolf word wore work worm worn wrap wren wring writ
+yard yarn yawn year yore your yule
+zeal zero zest zinc zone
+abode afoot alone among ankle apple arise avoid awoke
+badge basic baste batch begin berry blast blown blunt boner braid brainy brawl braze breed breve brine brook broom brood brose brute budge
+caged candy carol catch cause charm chart chase cheap cheat check cheek chess chest chief child chimp chore chord clank cling clock clone close cloth cloud clown comet comic coral couch could count crave creek crowd crown cruel crumb curse curve
+dance daisy daily dared dealt delta dense depot depot devil dirty dodge doing doubt dough drive drove drown dusky dwarf
+eagle easel elbow embed emery emote empty ended enemy enjoy enter equal erect
+fable faded fairy fangs feast field fierce fifth fight final flame flank flask fleet flesh flinch flint flock flood floor flour flute foist force forge foray found franc freed fresh friar
+gauge giant girth glare gleam glint globe gloom glory glove gnash godly grand grave great greed grief grill grope grout grove gruel guard guide guise
+habit hairy hamper happy harsh hasty heart heave hedge helix hence heron hover humid hurry
+icing ideal imply index infer inlet inner input inter invent
+jewel jibed joust
+known kneel knelt
+lance large lately laugh layer least leave ledge lemon level light linen liter liver local lodge loony lover lunar lunge lusty lustre
+maker manor maple marsh match mauve meant medal merry midst might mirth modal moody moral mourn mouse muddy mulch musty
+naive namby never nifty night noble norther
+occur ocean offer olive olive opera optic orbit order organ other outer outdo oven
+paint parch parse party patch pause peace penal penny perch phase photo piano pilot pilot pitch pixel place plaid plain plane plank plant plate plaza plead pleat plume plunk porch posed posse potent pouch power press pride prime prince print prism privy prize probe prong prove prowl prude prune
+query quest queue quill quirk quoth
+rally ranch rapid ratchet reach realm rebel rebus reedy reign revel rigor rigid ripen risen rival river rivet roomy rowdy royal rural
+sandy sauce scald scalp scant scone scoop scorch score scout screw scrub seize serve seven shaky shall shame shard share shark sharp shear sheen shelf shell shift shine shire shirt shore shout shrill shrug shunt siege sight since sixth sixty sized skiff skill skimp skull slant slick slide slime slink sloth smack small smash smell smelt smile smote snare sneak snipe snore snowy solar solid solve sooth sorry sound south space spare spark speck speed spire spoil stash stave steal steam steel steep steer stern stick still stoke stomp stony story stove strap stray streak steel strip strut stuck study stump stunt squab squat squid squad stark stern swamp swear sweat sweep sweet swept swift swine swirl sword
+table taboo taken tamed taunt tawny tempo tense tepid terms thane thatch there these thick thing think thorn those threw throw thyme tiger tight timer tipsy titan title toffee token topaz torch towel tower track trade trail train trait tramp trash trawl tread trend tribe trick tried tripe trite trove truce truck truly trump trunk trust tryst tumor tuner tunic twain tweak twice twirl twist tying
+ulcer ultra uncle undue unity unlit unmet until unwed upend upset urban usual usher
+vague valid valor vapid viper viral vital vivid vixen vogue voice voila voter vowel
+wager wagon waist waltz waste watch water wealth weary wedge weedy weevil weigh weird welch whale whack wheat where while whisk white whole whose widen windy witch witty woken wrath
+yacht yearn yelped yokel
+zebra zilch zonal
+above abuse acute admit adult after aging agony agree ahead aisle alarm album alert alibi align alike alive alley allot allow aloof alter amber ambit ample amuse angel angry anime annex annoy antic antics antique anxious apple apply apron aptly arbor ardor arise armor arson ashen aside asked asset astray attic audit
+`;
+
+const WORD_SET = new Set(WORD_LIST_RAW.split(/\s+/).map(w => w.trim().toUpperCase()).filter(w => w.length >= 3));
+
+// Scoring
+function scoreWord(w) {
+  const n = w.length;
+  if (n <= 4) return 1;
+  if (n === 5) return 2;
+  if (n === 6) return 3;
+  if (n === 7) return 5;
+  return 11;
+}
+
+// Weighted letters (Scrabble-inspired distribution)
+const LETTER_POOL = 'AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ';
+
+// Grid state
+let board = [];       // 16 letters
+let selectedCells = [];  // indices of clicked cells
+let foundWords = new Set();
+let score = 0;
+let timerVal = 180;
+let timerInterval = null;
+let gameActive = false;
+let highScore = parseInt(localStorage.getItem('boggleHigh') || '0');
+
+document.getElementById('high-val').textContent = highScore;
+
+// Build DOM grid
+const gridEl = document.getElementById('grid-container');
+const cells = [];
+for (let i = 0; i < 16; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.dataset.idx = i;
+  cell.addEventListener('click', () => onCellClick(i));
+  gridEl.appendChild(cell);
+  cells.push(cell);
+}
+
+function generateBoard() {
+  board = [];
+  for (let i = 0; i < 16; i++) {
+    board.push(LETTER_POOL[Math.floor(Math.random() * LETTER_POOL.length)]);
+  }
+  // Ensure at least 2 vowels (AEIOU)
+  const vowels = 'AEIOU';
+  let vowelCount = board.filter(l => vowels.includes(l)).length;
+  while (vowelCount < 3) {
+    const idx = Math.floor(Math.random() * 16);
+    if (!vowels.includes(board[idx])) {
+      board[idx] = vowels[Math.floor(Math.random() * vowels.length)];
+      vowelCount++;
+    }
+  }
+  renderBoard();
+}
+
+function renderBoard() {
+  cells.forEach((cell, i) => {
+    cell.textContent = board[i];
+    cell.className = 'cell';
+    // Remove seq-num
+    const sn = cell.querySelector('.seq-num');
+    if (sn) sn.remove();
+  });
+}
+
+function getRow(i) { return Math.floor(i / 4); }
+function getCol(i) { return i % 4; }
+
+function isAdjacent(a, b) {
+  return Math.abs(getRow(a) - getRow(b)) <= 1 && Math.abs(getCol(a) - getCol(b)) <= 1 && a !== b;
+}
+
+function onCellClick(idx) {
+  if (!gameActive) return;
+  const input = document.getElementById('word-input');
+
+  if (selectedCells.includes(idx)) {
+    // Clicking a cell that's already selected: if it's the last one, deselect it
+    if (selectedCells[selectedCells.length - 1] === idx) {
+      selectedCells.pop();
+      input.value = selectedCells.map(i => board[i]).join('');
+      updateCellStyles();
+    }
+    return;
+  }
+
+  // Must be adjacent to last selected cell
+  if (selectedCells.length > 0) {
+    const last = selectedCells[selectedCells.length - 1];
+    if (!isAdjacent(last, idx)) {
+      flashError('Letters must be adjacent!');
+      return;
+    }
+  }
+
+  selectedCells.push(idx);
+  input.value = selectedCells.map(i => board[i]).join('');
+  updateCellStyles();
+}
+
+function updateCellStyles() {
+  const n = selectedCells.length;
+  cells.forEach((cell, i) => {
+    cell.className = 'cell';
+    const sn = cell.querySelector('.seq-num');
+    if (sn) sn.remove();
+  });
+
+  selectedCells.forEach((idx, pos) => {
+    const cell = cells[idx];
+    // Color gradient from #4ade80 (start) to #22c55e (end)
+    const t = n > 1 ? pos / (n - 1) : 0;
+    const r = Math.round(74 + (34 - 74) * t);
+    const g = Math.round(222 + (197 - 222) * t);
+    const b = Math.round(128 + (94 - 128) * t);
+    cell.style.background = `rgb(${r},${g},${b})`;
+    cell.style.borderColor = '#4ade80';
+    cell.style.color = '#16213e';
+    cell.style.transform = 'scale(1.07)';
+
+    const sn = document.createElement('span');
+    sn.className = 'seq-num';
+    sn.textContent = pos + 1;
+    cell.appendChild(sn);
+  });
+
+  // Highlight adjacent cells (potential next picks)
+  if (n > 0) {
+    const last = selectedCells[n - 1];
+    for (let i = 0; i < 16; i++) {
+      if (!selectedCells.includes(i) && isAdjacent(last, i)) {
+        cells[i].classList.add('adjacent-hint');
+      }
+    }
+  }
+}
+
+function clearSelection() {
+  selectedCells = [];
+  document.getElementById('word-input').value = '';
+  renderBoard();
+  clearError();
+}
+
+// Keyboard input handling
+document.getElementById('word-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitWord();
+  if (e.key === 'Escape') clearSelection();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && gameActive) clearSelection();
+});
+
+document.getElementById('submit-btn').addEventListener('click', submitWord);
+document.getElementById('clear-btn').addEventListener('click', clearSelection);
+
+function submitWord() {
+  if (!gameActive) return;
+  const input = document.getElementById('word-input');
+  const word = input.value.toUpperCase().trim();
+
+  if (word.length < 3) { flashError('Words must be at least 3 letters!'); return; }
+  if (foundWords.has(word)) { flashError('Already found!'); return; }
+  if (!WORD_SET.has(word)) { flashError('Not in word list!'); return; }
+
+  // Validate path on board
+  const path = findPath(word);
+  if (!path) { flashError('Cannot make that word on the board!'); return; }
+
+  // Valid!
+  foundWords.add(word);
+  const pts = scoreWord(word);
+  score += pts;
+
+  document.getElementById('score-display').textContent = score;
+  addFoundWord(word, pts);
+  clearSelection();
+  clearError();
+
+  // Flash success
+  input.classList.add('success');
+  setTimeout(() => input.classList.remove('success'), 600);
+}
+
+function findPath(word) {
+  // DFS to find a valid path for the word
+  for (let start = 0; start < 16; start++) {
+    if (board[start] !== word[0]) continue;
+    const result = dfs(word, 1, [start]);
+    if (result) return result;
+  }
+  return null;
+}
+
+function dfs(word, pos, path) {
+  if (pos === word.length) return path;
+  const last = path[path.length - 1];
+  for (let next = 0; next < 16; next++) {
+    if (path.includes(next)) continue;
+    if (!isAdjacent(last, next)) continue;
+    if (board[next] !== word[pos]) continue;
+    const result = dfs(word, pos + 1, [...path, next]);
+    if (result) return result;
+  }
+  return null;
+}
+
+function addFoundWord(word, pts) {
+  const list = document.getElementById('found-list');
+  const item = document.createElement('div');
+  item.className = 'found-word';
+  item.innerHTML = word + `<span class="pts">+${pts}</span>`;
+  list.prepend(item);
+  document.getElementById('found-count').textContent = foundWords.size;
+}
+
+function flashError(msg) {
+  const input = document.getElementById('word-input');
+  const errEl = document.getElementById('error-msg');
+  errEl.textContent = msg;
+  input.classList.add('error');
+  setTimeout(() => {
+    input.classList.remove('error');
+  }, 400);
+}
+
+function clearError() {
+  document.getElementById('error-msg').textContent = '';
+}
+
+// Timer
+function startTimer() {
+  timerVal = 180;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    timerVal--;
+    updateTimerDisplay();
+    if (timerVal <= 0) {
+      clearInterval(timerInterval);
+      endGame();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timer');
+  const m = Math.floor(timerVal / 60);
+  const s = timerVal % 60;
+  el.textContent = m + ':' + String(s).padStart(2, '0');
+  el.classList.toggle('urgent', timerVal <= 30);
+}
+
+// Find all possible words on board (for end screen)
+function findAllBoardWords() {
+  const possible = new Set();
+  // Build trie for prefix checking
+  const trie = buildTrie();
+
+  for (let start = 0; start < 16; start++) {
+    dfsBoardAll(start, [start], board[start], trie.root, possible);
+  }
+  return possible;
+}
+
+function buildTrie() {
+  const root = {};
+  for (const word of WORD_SET) {
+    let node = root;
+    for (const ch of word) {
+      if (!node[ch]) node[ch] = {};
+      node = node[ch];
+    }
+    node['$'] = true;
+  }
+  return { root };
+}
+
+function dfsBoardAll(idx, path, current, trieNode, result) {
+  const node = trieNode[board[idx]];
+  if (!node) return;
+  if (node['$'] && current.length >= 3) result.add(current);
+
+  for (let next = 0; next < 16; next++) {
+    if (path.includes(next)) continue;
+    if (!isAdjacent(idx, next)) continue;
+    if (!node[board[next]]) continue;
+    dfsBoardAll(next, [...path, next], current + board[next], node, result);
+  }
+}
+
+function endGame() {
+  gameActive = false;
+  clearSelection();
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('boggleHigh', highScore);
+    document.getElementById('high-val').textContent = highScore;
+  }
+
+  const allPossible = findAllBoardWords();
+  const missed = [...allPossible].filter(w => !foundWords.has(w))
+    .sort((a, b) => scoreWord(b) - scoreWord(a) || b.length - a.length)
+    .slice(0, 20);
+
+  const statsEl = document.getElementById('end-stats');
+  statsEl.innerHTML = `
+    <div class="stat">Score: <span>${score}</span></div>
+    <div class="stat">Words Found: <span>${foundWords.size}</span></div>
+    <div class="stat">Possible Words: <span>${allPossible.size}</span></div>
+    ${score >= highScore ? '<div class="stat" style="color:#4ade80">🏆 New High Score!</div>' : `<div class="stat">Best Score: <span>${highScore}</span></div>`}
+  `;
+  statsEl.style.display = 'block';
+
+  if (missed.length > 0) {
+    const missedList = document.getElementById('missed-list');
+    missedList.innerHTML = missed.map(w => `<span class="missed-word">${w}(${scoreWord(w)})</span>`).join(' ');
+    document.getElementById('missed-words').style.display = 'block';
+  } else {
+    document.getElementById('missed-words').style.display = 'none';
+  }
+
+  document.getElementById('overlay-box').querySelector('h2').textContent = 'Time\'s Up!';
+  document.getElementById('overlay-box').querySelector('.sub').textContent = '';
+  document.getElementById('overlay').style.display = 'flex';
+}
+
+function startGame() {
+  clearInterval(timerInterval);
+  score = 0;
+  foundWords = new Set();
+  selectedCells = [];
+
+  document.getElementById('score-display').textContent = 0;
+  document.getElementById('found-list').innerHTML = '';
+  document.getElementById('found-count').textContent = 0;
+  document.getElementById('word-input').value = '';
+  document.getElementById('error-msg').textContent = '';
+  document.getElementById('end-stats').style.display = 'none';
+  document.getElementById('missed-words').style.display = 'none';
+  document.getElementById('overlay-box').querySelector('h2').textContent = 'BOGGLE';
+  document.getElementById('overlay-box').querySelector('.sub').textContent = 'Find words in the 4×4 grid.\nConnect adjacent letters (including diagonals).\nMin 3 letters. 3 minutes. Good luck!';
+
+  generateBoard();
+  gameActive = true;
+  startTimer();
+
+  document.getElementById('overlay').style.display = 'none';
+}
+
+document.getElementById('overlay-btn').addEventListener('click', startGame);
+</script>
+</body>
+</html>

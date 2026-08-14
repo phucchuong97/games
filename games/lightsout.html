@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lights Out</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px;
+}
+a.back { position: fixed; top: 12px; left: 12px; color: #94a3b8; text-decoration: none; font-size: 13px; }
+a.back:hover { color: #e0e0e0; }
+
+/* Overlay */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.panel {
+  background: #16213e; border: 2px solid #0f3460;
+  border-radius: 12px; padding: 36px 48px;
+  text-align: center; min-width: 300px; max-width: 400px;
+}
+.panel h2 { font-size: 28px; color: #4ade80; letter-spacing: 2px; margin-bottom: 10px; }
+.panel p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+.panel .win-text { font-size: 18px; color: #fbbf24; margin-bottom: 8px; }
+
+.diff-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
+button.diff-btn {
+  background: #16213e; color: #e0e0e0; border: 2px solid #0f3460;
+  border-radius: 6px; padding: 8px 18px; font-size: 14px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+button.diff-btn:hover, button.diff-btn.active {
+  border-color: #4ade80; background: #1e3a5f; color: #4ade80;
+}
+
+.size-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+button.size-btn {
+  background: #16213e; color: #e0e0e0; border: 2px solid #0f3460;
+  border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+button.size-btn:hover, button.size-btn.active {
+  border-color: #4ade80; background: #1e3a5f; color: #4ade80;
+}
+
+button.btn {
+  background: #4ade80; color: #16213e; font-weight: bold;
+  border: none; border-radius: 6px; padding: 10px 28px;
+  font-size: 16px; cursor: pointer; transition: background 0.15s;
+}
+button.btn:hover { background: #22c55e; }
+button.btn:disabled { background: #4ade8066; cursor: not-allowed; }
+
+/* HUD */
+#hud {
+  display: flex; align-items: center; gap: 24px;
+  margin-bottom: 16px; font-size: 15px;
+}
+.hud-box {
+  background: #16213e; border: 1px solid #0f3460;
+  border-radius: 8px; padding: 8px 18px; text-align: center;
+}
+.hud-box .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+.hud-box .num { font-size: 22px; font-weight: bold; color: #4ade80; }
+#mode-badge {
+  font-size: 13px; color: #94a3b8; background: #0f3460;
+  border-radius: 16px; padding: 4px 12px;
+}
+#mode-badge.solving { color: #fbbf24; border-color: #fbbf24; }
+
+/* Grid */
+#grid-container { margin-bottom: 16px; }
+#grid {
+  display: inline-grid;
+  gap: 6px;
+  padding: 12px;
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 12px;
+}
+
+.cell {
+  border: none; border-radius: 8px;
+  cursor: pointer; transition: background 0.12s, box-shadow 0.12s;
+  outline: none; position: relative;
+}
+.cell.on {
+  background: #fbbf24;
+  box-shadow: 0 0 14px rgba(251,191,36,0.7), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.cell.off {
+  background: #0f1f3d;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+}
+.cell.on:hover { background: #f59e0b; }
+.cell.off:hover { background: #1a3a6e; }
+.cell.hint-next {
+  outline: 3px solid #4ade80;
+  outline-offset: 2px;
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from { outline-color: #4ade80; box-shadow: 0 0 0 0 rgba(74,222,128,0.3); }
+  to   { outline-color: #22c55e; box-shadow: 0 0 8px 4px rgba(74,222,128,0.3); }
+}
+
+/* Controls */
+#controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button.btn-sm {
+  background: #4ade80; color: #16213e; font-weight: bold;
+  border: none; border-radius: 6px; padding: 8px 20px;
+  font-size: 14px; cursor: pointer; transition: background 0.15s;
+}
+button.btn-sm:hover { background: #22c55e; }
+button.btn-sm.danger {
+  background: #16213e; color: #f87171; border: 1px solid #f87171;
+}
+button.btn-sm.danger:hover { background: #f87171; color: #16213e; }
+button.btn-sm.secondary {
+  background: #16213e; color: #94a3b8; border: 1px solid #0f3460;
+}
+button.btn-sm.secondary:hover { border-color: #94a3b8; color: #e0e0e0; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back">← Back</a>
+
+<!-- Start/settings overlay -->
+<div id="overlay">
+  <div class="panel" id="start-panel">
+    <h2>LIGHTS OUT</h2>
+    <p>Toggle a cell to flip it and all orthogonal neighbors.<br>Turn <em>all</em> lights <strong>off</strong>.</p>
+    <div class="diff-row">
+      <button class="diff-btn active" data-diff="easy" onclick="selectDiff(this,'easy')">Easy</button>
+      <button class="diff-btn" data-diff="medium" onclick="selectDiff(this,'medium')">Medium</button>
+      <button class="diff-btn" data-diff="hard" onclick="selectDiff(this,'hard')">Hard</button>
+    </div>
+    <div class="size-row">
+      <button class="size-btn" data-size="4" onclick="selectSize(this,4)">4×4</button>
+      <button class="size-btn active" data-size="5" onclick="selectSize(this,5)">5×5</button>
+      <button class="size-btn" data-size="6" onclick="selectSize(this,6)">6×6</button>
+    </div>
+    <button class="btn" onclick="startGame()">Start Game</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-box">
+    <div class="label">Moves</div>
+    <div class="num" id="move-count">0</div>
+  </div>
+  <div id="mode-badge">Playing</div>
+  <div class="hud-box">
+    <div class="label">Size</div>
+    <div class="num" id="size-display">5×5</div>
+  </div>
+</div>
+
+<!-- Grid -->
+<div id="grid-container">
+  <div id="grid"></div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button class="btn-sm" onclick="newPuzzle()">New Puzzle</button>
+  <button class="btn-sm secondary" onclick="toggleSolve()">Solve</button>
+  <button class="btn-sm secondary" onclick="showSettings()">Settings</button>
+</div>
+
+<script>
+let N = 5;
+let difficulty = 'easy';
+let state = []; // flat array of 0/1
+let moves = 0;
+let solving = false;
+let solveTimer = null;
+let solutionSteps = []; // array of cell indices to click
+let solveIndex = 0;
+const DIFF_CLICKS = { easy: 5, medium: 10, hard: 20 };
+
+function selectDiff(el, d) {
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  difficulty = d;
+}
+function selectSize(el, s) {
+  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  N = s;
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('size-display').textContent = `${N}×${N}`;
+  newPuzzle();
+}
+
+function showSettings() {
+  stopSolve();
+  // Restore start panel
+  document.getElementById('overlay').querySelector('.panel').innerHTML = `
+    <h2>LIGHTS OUT</h2>
+    <p>Toggle a cell to flip it and all orthogonal neighbors.<br>Turn <em>all</em> lights <strong>off</strong>.</p>
+    <div class="diff-row">
+      <button class="diff-btn ${difficulty==='easy'?'active':''}" data-diff="easy" onclick="selectDiff(this,'easy')">Easy</button>
+      <button class="diff-btn ${difficulty==='medium'?'active':''}" data-diff="medium" onclick="selectDiff(this,'medium')">Medium</button>
+      <button class="diff-btn ${difficulty==='hard'?'active':''}" data-diff="hard" onclick="selectDiff(this,'hard')">Hard</button>
+    </div>
+    <div class="size-row">
+      <button class="size-btn ${N===4?'active':''}" data-size="4" onclick="selectSize(this,4)">4×4</button>
+      <button class="size-btn ${N===5?'active':''}" data-size="5" onclick="selectSize(this,5)">5×5</button>
+      <button class="size-btn ${N===6?'active':''}" data-size="6" onclick="selectSize(this,6)">6×6</button>
+    </div>
+    <button class="btn" onclick="startGame()">Apply & New Game</button>
+  `;
+  document.getElementById('overlay').style.display = 'flex';
+}
+
+function newPuzzle() {
+  stopSolve();
+  moves = 0;
+  document.getElementById('move-count').textContent = '0';
+  setModeBadge('Playing');
+
+  // Generate solvable puzzle: start from all-off, make N random clicks
+  state = new Array(N * N).fill(0);
+  const clicks = DIFF_CLICKS[difficulty];
+  for (let i = 0; i < clicks; i++) {
+    const idx = Math.floor(Math.random() * N * N);
+    applyToggle(idx, false);
+  }
+
+  renderGrid();
+}
+
+function applyToggle(idx, countMove) {
+  const r = Math.floor(idx / N), c = idx % N;
+  const toFlip = [idx];
+  if (r > 0)   toFlip.push((r-1)*N + c);
+  if (r < N-1) toFlip.push((r+1)*N + c);
+  if (c > 0)   toFlip.push(r*N + c - 1);
+  if (c < N-1) toFlip.push(r*N + c + 1);
+  for (const i of toFlip) state[i] ^= 1;
+  if (countMove) {
+    moves++;
+    document.getElementById('move-count').textContent = moves;
+  }
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const cellSize = N === 6 ? 56 : N === 4 ? 80 : 64;
+  grid.style.gridTemplateColumns = `repeat(${N}, ${cellSize}px)`;
+  grid.innerHTML = '';
+  for (let i = 0; i < N * N; i++) {
+    const btn = document.createElement('button');
+    btn.className = `cell ${state[i] ? 'on' : 'off'}`;
+    btn.style.width = btn.style.height = cellSize + 'px';
+    btn.dataset.idx = i;
+    btn.addEventListener('click', () => handleClick(i));
+    grid.appendChild(btn);
+  }
+}
+
+function handleClick(idx) {
+  if (solving) return;
+  applyToggle(idx, true);
+  updateCells();
+  if (isWon()) showWin();
+}
+
+function updateCells() {
+  document.querySelectorAll('.cell').forEach(cell => {
+    const i = +cell.dataset.idx;
+    cell.className = `cell ${state[i] ? 'on' : 'off'}`;
+  });
+}
+
+function isWon() { return state.every(v => v === 0); }
+
+function showWin() {
+  stopSolve();
+  const ov = document.getElementById('overlay');
+  ov.style.display = 'flex';
+  ov.querySelector('.panel').innerHTML = `
+    <h2 style="color:#fbbf24">You Win!</h2>
+    <p class="win-text">Puzzle solved in <strong>${moves}</strong> move${moves!==1?'s':''}!</p>
+    <p style="margin-bottom:24px">All lights are off.</p>
+    <button class="btn" onclick="closeWinAndNew()">Play Again</button>
+  `;
+}
+
+function closeWinAndNew() {
+  document.getElementById('overlay').style.display = 'none';
+  newPuzzle();
+}
+
+// --- GF(2) Gaussian Elimination Solver ---
+function solveGF2(lights) {
+  const size = N * N;
+  // mat[i] = row of the augmented matrix [A | b]
+  // A[i][j] = 1 if pressing button j toggles cell i
+  const mat = [];
+  for (let i = 0; i < size; i++) {
+    const row = new Uint8Array(size + 1);
+    const ri = Math.floor(i / N), ci = i % N;
+    for (let j = 0; j < size; j++) {
+      const rj = Math.floor(j / N), cj = j % N;
+      if (i === j || Math.abs(ri-rj) + Math.abs(ci-cj) === 1) row[j] = 1;
+    }
+    row[size] = lights[i];
+    mat.push(row);
+  }
+
+  const pivotOf = new Array(size).fill(-1); // pivotOf[row] = col
+  let pivotRow = 0;
+
+  for (let col = 0; col < size && pivotRow < size; col++) {
+    let found = -1;
+    for (let r = pivotRow; r < size; r++) {
+      if (mat[r][col]) { found = r; break; }
+    }
+    if (found < 0) continue;
+    const tmp = mat[pivotRow]; mat[pivotRow] = mat[found]; mat[found] = tmp;
+    pivotOf[pivotRow] = col;
+    for (let r = 0; r < size; r++) {
+      if (r !== pivotRow && mat[r][col]) {
+        for (let c = col; c <= size; c++) mat[r][c] ^= mat[pivotRow][c];
+      }
+    }
+    pivotRow++;
+  }
+
+  // Extract solution (free vars = 0)
+  const x = new Array(size).fill(0);
+  for (let r = 0; r < pivotRow; r++) {
+    if (pivotOf[r] >= 0) x[pivotOf[r]] = mat[r][size];
+  }
+  return x;
+}
+
+function toggleSolve() {
+  if (solving) { stopSolve(); return; }
+  if (isWon()) return;
+
+  const sol = solveGF2([...state]);
+  solutionSteps = sol.reduce((arr, v, i) => { if (v) arr.push(i); return arr; }, []);
+
+  if (solutionSteps.length === 0) {
+    setModeBadge('No solution found');
+    return;
+  }
+
+  solving = true;
+  solveIndex = 0;
+  setModeBadge('Auto-solving…');
+  highlightSolveCell();
+  autoPlayStep();
+}
+
+function autoPlayStep() {
+  if (!solving || solveIndex >= solutionSteps.length) {
+    stopSolve();
+    return;
+  }
+  const idx = solutionSteps[solveIndex];
+  highlightSolveCell(idx);
+
+  solveTimer = setTimeout(() => {
+    applyToggle(idx, true);
+    updateCells();
+    solveIndex++;
+    if (isWon()) {
+      stopSolve();
+      setTimeout(() => showWin(), 300);
+    } else {
+      autoPlayStep();
+    }
+  }, 480);
+}
+
+function highlightSolveCell(idx) {
+  document.querySelectorAll('.cell').forEach(c => c.classList.remove('hint-next'));
+  if (idx !== undefined) {
+    const cell = document.querySelector(`.cell[data-idx="${idx}"]`);
+    if (cell) cell.classList.add('hint-next');
+  }
+}
+
+function stopSolve() {
+  solving = false;
+  if (solveTimer) { clearTimeout(solveTimer); solveTimer = null; }
+  document.querySelectorAll('.cell').forEach(c => c.classList.remove('hint-next'));
+  setModeBadge('Playing');
+}
+
+function setModeBadge(text) {
+  const badge = document.getElementById('mode-badge');
+  badge.textContent = text;
+  badge.className = text.includes('solving') ? 'mode-badge solving' : 'mode-badge';
+}
+</script>
+</body>
+</html>

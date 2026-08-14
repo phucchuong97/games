@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5-Card Draw Poker</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  background: #1a1a2e; color: #e0e0e0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  padding: 20px 12px; gap: 10px;
+}
+h1 { margin: 0; color: #4ade80; letter-spacing: 3px; font-size: 26px; }
+#balance-bar { font-size: 17px; color: #94a3b8; }
+#balance-bar b { color: #4ade80; font-size: 20px; }
+#table {
+  width: 100%; max-width: 620px;
+  background: #16213e; border: 2px solid #0f3460;
+  border-radius: 16px; padding: 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.section-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.hand { display: flex; gap: 8px; flex-wrap: wrap; min-height: 110px; }
+
+/* CSS cards */
+.card {
+  width: 66px; height: 94px;
+  background: #fff; border-radius: 8px;
+  display: flex; flex-direction: column;
+  justify-content: space-between;
+  padding: 5px 6px;
+  font-weight: bold; font-size: 14px;
+  color: #1f2937;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  cursor: default;
+  user-select: none;
+  position: relative;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.card.red { color: #dc2626; }
+.card.back {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f3460 50%, #1e3a5f 100%);
+  color: transparent;
+  border: 2px solid #4ade80;
+}
+.card.back::after {
+  content: "🂠";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; color: #4ade8044;
+}
+.card .top { font-size: 13px; }
+.card .mid { position: relative; flex: 1 1 auto; margin: 1px 0; }
+.card .mid .pip { position: absolute; transform: translate(-50%, -50%); font-size: 11px; line-height: 1; }
+.card .mid .pip.flip { transform: translate(-50%, -50%) rotate(180deg); }
+.card .mid .big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.card .mid .face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.card .mid .face small { font-size: 0.6em; margin-left: 1px; }
+.card .bot { font-size: 13px; text-align: right; transform: rotate(180deg); }
+.card.selected {
+  transform: translateY(-12px);
+  box-shadow: 0 0 0 2px #f59e0b, 0 6px 16px rgba(0,0,0,0.5);
+}
+.card.selectable { cursor: pointer; }
+.card.selectable:hover:not(.selected) { transform: translateY(-4px); }
+.discard-label {
+  position: absolute; bottom: -22px; left: 0; right: 0;
+  text-align: center; font-size: 10px; color: #f59e0b; font-weight: bold;
+}
+
+.card-slot {
+  width: 66px; height: 94px;
+  border: 2px dashed #0f3460;
+  border-radius: 8px;
+}
+@keyframes flip-in {
+  from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
+  to   { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+.card.flip-anim { animation: flip-in 0.35s ease; }
+@keyframes deal-in {
+  from { transform: translateY(-24px) scale(0.8); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.card.deal-anim { animation: deal-in 0.25s ease; }
+
+hr { border: none; border-top: 1px solid #0f3460; margin: 0; }
+
+#hand-name {
+  text-align: center; font-size: 18px; font-weight: bold;
+  color: #4ade80; min-height: 26px;
+}
+#msg {
+  text-align: center; font-size: 15px; color: #94a3b8; min-height: 20px;
+}
+
+/* Payout table */
+#payout-table {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 3px 16px; font-size: 12px;
+}
+#payout-table .ph { font-weight: bold; color: #94a3b8; font-size: 11px; }
+#payout-table .pv { text-align: right; color: #4ade80; font-weight: bold; }
+
+/* Phase: ante / draw / result */
+#phase-ante, #phase-draw, #phase-result { display: none; flex-direction: column; gap: 10px; align-items: center; }
+#phase-ante.active, #phase-draw.active, #phase-result.active { display: flex; }
+
+button.btn {
+  background: #4ade80; color: #16213e;
+  border: none; padding: 10px 24px;
+  font-size: 15px; font-weight: bold;
+  border-radius: 6px; cursor: pointer;
+}
+button.btn:hover { background: #22c55e; }
+button.btn:disabled { background: #374151; color: #6b7280; cursor: default; }
+button.btn.secondary {
+  background: #374151; color: #e0e0e0;
+}
+button.btn.secondary:hover { background: #4b5563; }
+button.btn.red-btn { background: #f87171; color: #16213e; }
+button.btn.red-btn:hover { background: #ef4444; }
+
+#result-msg { text-align: center; font-size: 22px; font-weight: bold; min-height: 28px; }
+#result-msg.win { color: #4ade80; }
+#result-msg.lose { color: #f87171; }
+
+/* Start overlay */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,10,20,0.92);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px; z-index: 100;
+}
+#overlay h2 { color: #4ade80; font-size: 32px; margin: 0; letter-spacing: 3px; }
+#overlay .sub { color: #94a3b8; font-size: 14px; margin: 0; }
+#overlay table { border-collapse: collapse; font-size: 13px; color: #e0e0e0; }
+#overlay table td { padding: 3px 12px; }
+#overlay table td:last-child { color: #4ade80; text-align: right; font-weight: bold; }
+
+/* Game over */
+#gameover {
+  display: none; position: fixed; inset: 0;
+  background: rgba(10,10,20,0.92);
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; z-index: 100;
+}
+#gameover.show { display: flex; }
+#gameover h2 { color: #f87171; font-size: 28px; margin: 0; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>POKER</h1>
+<div id="balance-bar">Balance: <b id="bal">$200</b></div>
+
+<div id="table">
+  <!-- Dealer hand -->
+  <div>
+    <div class="section-label">Dealer</div>
+    <div class="hand" id="dealer-hand"></div>
+  </div>
+  <hr>
+  <!-- Player hand -->
+  <div>
+    <div class="section-label">Your Hand</div>
+    <div class="hand" id="player-hand"></div>
+  </div>
+  <div id="hand-name"></div>
+  <div id="msg"></div>
+  <hr>
+
+  <!-- Phase: ante -->
+  <div id="phase-ante" class="active">
+    <div style="font-size:14px;color:#94a3b8;">Ante: <b style="color:#f59e0b;">$10</b></div>
+    <button class="btn" id="deal-btn">Deal ($10 ante)</button>
+  </div>
+
+  <!-- Phase: draw -->
+  <div id="phase-draw">
+    <div style="font-size:13px;color:#94a3b8;">Click cards to discard, then draw</div>
+    <button class="btn" id="draw-btn">Draw</button>
+  </div>
+
+  <!-- Phase: result -->
+  <div id="phase-result">
+    <div id="result-msg"></div>
+    <button class="btn" id="next-btn">Next Round</button>
+  </div>
+</div>
+
+<!-- Payout sidebar -->
+<div id="table" style="max-width:620px;width:100%;background:#16213e;border:2px solid #0f3460;border-radius:12px;padding:14px;">
+  <div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Payout Table</div>
+  <div id="payout-table">
+    <span class="ph">Royal Flush</span><span class="pv">250×</span>
+    <span class="ph">Straight Flush</span><span class="pv">50×</span>
+    <span class="ph">Four of a Kind</span><span class="pv">25×</span>
+    <span class="ph">Full House</span><span class="pv">9×</span>
+    <span class="ph">Flush</span><span class="pv">6×</span>
+    <span class="ph">Straight</span><span class="pv">4×</span>
+    <span class="ph">Three of a Kind</span><span class="pv">3×</span>
+    <span class="ph">Two Pair</span><span class="pv">2×</span>
+    <span class="ph">One Pair</span><span class="pv">1×</span>
+    <span class="ph">High Card</span><span class="pv">lose ante</span>
+  </div>
+</div>
+
+<!-- Start overlay -->
+<div id="overlay">
+  <h2>5-CARD DRAW POKER</h2>
+  <p class="sub">Player vs Dealer · $10 ante · Start with $200</p>
+  <table>
+    <tr><td>Royal Flush</td><td>250×</td></tr>
+    <tr><td>Straight Flush</td><td>50×</td></tr>
+    <tr><td>Four of a Kind</td><td>25×</td></tr>
+    <tr><td>Full House</td><td>9×</td></tr>
+    <tr><td>Flush</td><td>6×</td></tr>
+    <tr><td>Straight</td><td>4×</td></tr>
+    <tr><td>Three of a Kind</td><td>3×</td></tr>
+    <tr><td>Two Pair</td><td>2×</td></tr>
+    <tr><td>Pair (Jacks+)</td><td>1×</td></tr>
+    <tr><td>High Card</td><td>lose ante</td></tr>
+  </table>
+  <button class="btn" id="start-btn">Start Game</button>
+</div>
+
+<!-- Game over -->
+<div id="gameover">
+  <h2>GAME OVER</h2>
+  <p style="color:#94a3b8;margin:0;">You ran out of chips!</p>
+  <button class="btn" id="restart-btn">Play Again ($200)</button>
+</div>
+
+<script>
+const SUITS = ["♠","♥","♦","♣"];
+const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+const RANK_VAL = Object.fromEntries(RANKS.map((r,i) => [r, i+2]));
+
+// Traditional pip layouts for number cards: [x%, y%] within the card's middle band
+const PIP_L = 26, PIP_C = 50, PIP_R = 74;
+const PIP_LAYOUTS = {
+  "2":  [[PIP_C,16],[PIP_C,84]],
+  "3":  [[PIP_C,16],[PIP_C,50],[PIP_C,84]],
+  "4":  [[PIP_L,16],[PIP_R,16],[PIP_L,84],[PIP_R,84]],
+  "5":  [[PIP_L,16],[PIP_R,16],[PIP_C,50],[PIP_L,84],[PIP_R,84]],
+  "6":  [[PIP_L,16],[PIP_R,16],[PIP_L,50],[PIP_R,50],[PIP_L,84],[PIP_R,84]],
+  "7":  [[PIP_L,16],[PIP_R,16],[PIP_C,33],[PIP_L,50],[PIP_R,50],[PIP_L,84],[PIP_R,84]],
+  "8":  [[PIP_L,16],[PIP_R,16],[PIP_C,33],[PIP_L,50],[PIP_R,50],[PIP_C,67],[PIP_L,84],[PIP_R,84]],
+  "9":  [[PIP_L,14],[PIP_R,14],[PIP_L,38],[PIP_R,38],[PIP_C,50],[PIP_L,62],[PIP_R,62],[PIP_L,86],[PIP_R,86]],
+  "10": [[PIP_L,14],[PIP_R,14],[PIP_C,26],[PIP_L,38],[PIP_R,38],[PIP_L,62],[PIP_R,62],[PIP_C,74],[PIP_L,86],[PIP_R,86]],
+};
+function pipFace(rank, suit) {
+  if (rank === "A") return `<div class="big">${suit}</div>`;
+  if (rank === "J" || rank === "Q" || rank === "K")
+    return `<div class="face">${rank}<small>${suit}</small></div>`;
+  const lay = PIP_LAYOUTS[rank];
+  if (!lay) return `<div class="big">${suit}</div>`;
+  return lay.map(([x, y]) =>
+    `<span class="pip${y > 50 ? " flip" : ""}" style="left:${x}%;top:${y}%">${suit}</span>`
+  ).join("");
+}
+const RED = new Set(["♥","♦"]);
+const ANTE = 10;
+
+let balance, deck, playerCards, dealerCards, selected;
+
+function loadBalance() {
+  const v = parseInt(localStorage.getItem("pokerBalance")) || 200;
+  return v > 0 ? v : 200;
+}
+function saveBalance() { localStorage.setItem("pokerBalance", balance); }
+
+function buildDeck() {
+  const d = [];
+  for (const s of SUITS) for (const r of RANKS) d.push({s,r});
+  for (let i = d.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [d[i],d[j]] = [d[j],d[i]];
+  }
+  return d;
+}
+
+function makeCardEl(card, hidden, anim) {
+  const el = document.createElement("div");
+  if (hidden) {
+    el.className = "card back" + (anim ? " deal-anim" : "");
+    return el;
+  }
+  const isRed = RED.has(card.s);
+  el.className = "card" + (isRed ? " red" : "") + (anim ? " deal-anim" : "");
+  el.innerHTML = `<div class="top">${card.r}${card.s}</div><div class="mid">${pipFace(card.r, card.s)}</div><div class="bot">${card.r}${card.s}</div>`;
+  return el;
+}
+
+function renderDealer(hidden) {
+  const area = document.getElementById("dealer-hand");
+  area.innerHTML = "";
+  dealerCards.forEach(c => area.appendChild(makeCardEl(c, hidden)));
+}
+
+function renderPlayer() {
+  const area = document.getElementById("player-hand");
+  area.innerHTML = "";
+  playerCards.forEach((c, i) => {
+    const el = makeCardEl(c, false);
+    el.classList.add("selectable");
+    if (selected.has(i)) {
+      el.classList.add("selected");
+      const lbl = document.createElement("div");
+      lbl.className = "discard-label";
+      lbl.textContent = "DISCARD";
+      el.appendChild(lbl);
+    }
+    el.addEventListener("click", () => toggleSelect(i));
+    area.appendChild(el);
+  });
+  const name = getHandName(playerCards);
+  document.getElementById("hand-name").textContent = name;
+}
+
+function toggleSelect(i) {
+  if (selected.has(i)) selected.delete(i);
+  else selected.add(i);
+  renderPlayer();
+}
+
+// Hand evaluation
+function handRank(cards) {
+  const vals = cards.map(c => RANK_VAL[c.r]).sort((a,b)=>a-b);
+  const suits = cards.map(c => c.s);
+  const counts = {};
+  vals.forEach(v => counts[v] = (counts[v]||0)+1);
+  const freq = Object.values(counts).sort((a,b)=>b-a);
+  const isFlush = suits.every(s => s === suits[0]);
+  const isStraight = freq[0]===1 && (vals[4]-vals[0]===4 || (vals[4]===14 && vals[3]===5 && vals[0]===2));
+  const isRoyal = isFlush && isStraight && vals[4]===14 && vals[3]===13;
+
+  if (isRoyal) return [9, vals];
+  if (isFlush && isStraight) return [8, vals];
+  if (freq[0]===4) return [7, vals];
+  if (freq[0]===3 && freq[1]===2) return [6, vals];
+  if (isFlush) return [5, vals];
+  if (isStraight) return [4, vals];
+  if (freq[0]===3) return [3, vals];
+  if (freq[0]===2 && freq[1]===2) return [2, vals];
+  if (freq[0]===2) return [1, vals];
+  return [0, vals];
+}
+
+const HAND_NAMES = [
+  "High Card","One Pair","Two Pair","Three of a Kind",
+  "Straight","Flush","Full House","Four of a Kind",
+  "Straight Flush","Royal Flush"
+];
+const PAYOUTS = [0, 1, 2, 3, 4, 6, 9, 25, 50, 250];
+
+function getHandName(cards) { return HAND_NAMES[handRank(cards)[0]]; }
+
+function compareHands(a, b) {
+  const [ra, va] = handRank(a);
+  const [rb, vb] = handRank(b);
+  if (ra !== rb) return ra - rb;
+  for (let i = va.length-1; i >= 0; i--) {
+    if (va[i] !== vb[i]) return va[i] - vb[i];
+  }
+  return 0;
+}
+
+function setPhase(p) {
+  ["phase-ante","phase-draw","phase-result"].forEach(id => {
+    document.getElementById(id).classList.toggle("active", id === p);
+  });
+}
+
+function updateBalanceDisplay() {
+  document.getElementById("bal").textContent = "$" + balance;
+}
+
+function deal() {
+  if (balance < ANTE) { return; }
+  balance -= ANTE;
+  saveBalance();
+  updateBalanceDisplay();
+
+  deck = buildDeck();
+  playerCards = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+  dealerCards  = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+  selected = new Set();
+
+  renderDealer(true);
+  renderPlayer();
+  document.getElementById("msg").textContent = "Select cards to discard, then draw.";
+  document.getElementById("hand-name").textContent = getHandName(playerCards);
+  setPhase("phase-draw");
+}
+
+function draw() {
+  // Replace selected cards
+  selected.forEach(i => { playerCards[i] = deck.pop(); });
+  selected = new Set();
+
+  // Dealer AI: keep pairs+, otherwise draw to try to improve
+  const [dRank] = handRank(dealerCards);
+  if (dRank < 1) {
+    // No pair — find best cards to keep (highest 2), redraw rest
+    const sorted = [...dealerCards].map((c,i)=>({c,i})).sort((a,b)=>RANK_VAL[b.c.r]-RANK_VAL[a.c.r]);
+    const keep = new Set([sorted[0].i, sorted[1].i]);
+    dealerCards = dealerCards.map((c,i) => keep.has(i) ? c : deck.pop());
+  }
+  // else keep all (has pair or better)
+
+  renderPlayer();
+  revealDealer();
+}
+
+function revealDealer() {
+  // Animate flip
+  const area = document.getElementById("dealer-hand");
+  area.innerHTML = "";
+  dealerCards.forEach((c, i) => {
+    const el = makeCardEl(c, true);
+    area.appendChild(el);
+    setTimeout(() => {
+      const newEl = makeCardEl(c, false, true);
+      newEl.classList.add("flip-anim");
+      area.replaceChild(newEl, el);
+    }, i * 200 + 100);
+  });
+
+  setTimeout(() => {
+    resolveRound();
+  }, dealerCards.length * 200 + 400);
+}
+
+function resolveRound() {
+  const pRank = handRank(playerCards)[0];
+  const cmp = compareHands(playerCards, dealerCards);
+  const pName = HAND_NAMES[pRank];
+  const dName = getHandName(dealerCards);
+  const rmEl = document.getElementById("result-msg");
+
+  if (pRank === 0) {
+    // High card = lose ante always
+    rmEl.textContent = `You: ${pName} · Dealer: ${dName} → Lose`;
+    rmEl.className = "lose";
+  } else if (cmp > 0) {
+    const pay = PAYOUTS[pRank] * ANTE;
+    balance += pay + ANTE; // win + get ante back
+    saveBalance();
+    updateBalanceDisplay();
+    rmEl.textContent = `You: ${pName} · Dealer: ${dName} → Win $${pay}!`;
+    rmEl.className = "win";
+  } else if (cmp === 0) {
+    balance += ANTE; // push, get ante back
+    saveBalance();
+    updateBalanceDisplay();
+    rmEl.textContent = `You: ${pName} · Dealer: ${dName} → Push`;
+    rmEl.className = "";
+  } else {
+    rmEl.textContent = `You: ${pName} · Dealer: ${dName} → Lose`;
+    rmEl.className = "lose";
+  }
+
+  document.getElementById("msg").textContent = "";
+  setPhase("phase-result");
+
+  if (balance <= 0) {
+    setTimeout(() => document.getElementById("gameover").classList.add("show"), 1200);
+  }
+}
+
+// Init
+balance = loadBalance();
+updateBalanceDisplay();
+selected = new Set();
+playerCards = []; dealerCards = [];
+// Show empty hands
+document.getElementById("dealer-hand").innerHTML = "";
+document.getElementById("player-hand").innerHTML = "";
+
+document.getElementById("start-btn").addEventListener("click", () => {
+  document.getElementById("overlay").style.display = "none";
+});
+document.getElementById("deal-btn").addEventListener("click", deal);
+document.getElementById("draw-btn").addEventListener("click", draw);
+document.getElementById("next-btn").addEventListener("click", () => {
+  document.getElementById("result-msg").textContent = "";
+  document.getElementById("hand-name").textContent = "";
+  document.getElementById("msg").textContent = "";
+  document.getElementById("dealer-hand").innerHTML = "";
+  document.getElementById("player-hand").innerHTML = "";
+  setPhase("phase-ante");
+  if (balance <= 0) {
+    document.getElementById("gameover").classList.add("show");
+  }
+});
+document.getElementById("restart-btn").addEventListener("click", () => {
+  balance = 200; saveBalance(); updateBalanceDisplay();
+  document.getElementById("gameover").classList.remove("show");
+  document.getElementById("result-msg").textContent = "";
+  document.getElementById("hand-name").textContent = "";
+  document.getElementById("msg").textContent = "";
+  document.getElementById("dealer-hand").innerHTML = "";
+  document.getElementById("player-hand").innerHTML = "";
+  setPhase("phase-ante");
+});
+</script>
+</body>
+</html>
