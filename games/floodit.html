@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flood-It</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    user-select: none;
+  }
+  h1 { color: #4ade80; margin: 24px 0 6px; }
+  .bar {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 8px;
+    font-size: 15px;
+  }
+  .bar b { color: #fbbf24; }
+  .panel {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 12px;
+  }
+  #board {
+    display: grid;
+    gap: 2px;
+  }
+  .cell { width: 24px; height: 24px; border-radius: 3px; }
+  .palette {
+    display: flex;
+    gap: 10px;
+    margin: 8px;
+  }
+  .swatch {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    border: 2px solid #0f3460;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .swatch:hover { transform: scale(1.08); }
+  button, select {
+    font-family: inherit;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    padding: 9px 16px;
+  }
+  button:hover { background: #22c55e; }
+  select {
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    padding: 8px 10px;
+  }
+  .msg { font-size: 16px; height: 22px; margin: 4px; }
+  .win { color: #4ade80; font-weight: bold; }
+  .lose { color: #f87171; font-weight: bold; }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,12,25,0.93);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 10;
+    text-align: center;
+    padding: 20px;
+  }
+  .overlay h2 { color: #4ade80; font-size: 32px; margin: 0; }
+  .overlay p { color: #94a3b8; margin: 0; font-size: 16px; max-width: 420px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>Flood-It</h1>
+<div class="bar">
+  <div>Moves: <b id="moves">0</b> / <span id="limit">25</span></div>
+  <label>Size
+    <select id="sizeSel">
+      <option value="12">12 × 12</option>
+      <option value="14" selected>14 × 14</option>
+      <option value="18">18 × 18</option>
+    </select>
+  </label>
+</div>
+<div class="panel"><div id="board"></div></div>
+<div class="msg" id="msg"></div>
+<div class="palette" id="palette"></div>
+<button id="newBtn">New Game</button>
+
+<div class="overlay" id="startOverlay">
+  <h2>Flood-It</h2>
+  <p>Flood the whole board with one color. The fill starts at the top-left and grows each time you pick a color. Fill the entire grid before you run out of moves!</p>
+  <button id="startBtn">Start</button>
+</div>
+
+<script>
+const COLORS = ['#f87171','#fbbf24','#4ade80','#60a5fa','#c084fc','#f472b6'];
+const boardEl = document.getElementById('board');
+const movesEl = document.getElementById('moves');
+const limitEl = document.getElementById('limit');
+const msgEl = document.getElementById('msg');
+
+let N = 14;
+let grid = [];
+let cells = [];
+let moves = 0;
+let limit = 25;
+let over = false;
+
+function moveLimit(n){
+  // scale limit with board size; 25 for 14x14
+  return Math.round(n * 25 / 14) + (n>=18 ? 2 : 0);
+}
+
+function newGame(){
+  N = parseInt(document.getElementById('sizeSel').value, 10);
+  limit = moveLimit(N);
+  limitEl.textContent = limit;
+  moves = 0;
+  movesEl.textContent = 0;
+  over = false;
+  msgEl.textContent = '';
+  msgEl.className = 'msg';
+
+  grid = [];
+  for(let r=0;r<N;r++){
+    grid.push([]);
+    for(let c=0;c<N;c++){
+      grid[r].push(Math.floor(Math.random()*COLORS.length));
+    }
+  }
+
+  boardEl.style.gridTemplateColumns = `repeat(${N}, 24px)`;
+  boardEl.innerHTML = '';
+  cells = [];
+  for(let r=0;r<N;r++){
+    cells.push([]);
+    for(let c=0;c<N;c++){
+      const d = document.createElement('div');
+      d.className = 'cell';
+      boardEl.appendChild(d);
+      cells[r].push(d);
+    }
+  }
+  render();
+  document.getElementById('startOverlay').classList.add('hidden');
+}
+
+function render(){
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      cells[r][c].style.background = COLORS[grid[r][c]];
+    }
+  }
+}
+
+// region connected to (0,0)
+function region(){
+  const start = grid[0][0];
+  const seen = new Set();
+  const stack = [[0,0]];
+  seen.add('0,0');
+  while(stack.length){
+    const [r,c] = stack.pop();
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dr,dc] of dirs){
+      const nr=r+dr, nc=c+dc;
+      if(nr<0||nc<0||nr>=N||nc>=N) continue;
+      const k = nr+','+nc;
+      if(seen.has(k)) continue;
+      if(grid[nr][nc]===start){ seen.add(k); stack.push([nr,nc]); }
+    }
+  }
+  return seen;
+}
+
+function pick(color){
+  if(over) return;
+  if(color === grid[0][0]) return; // no-op, don't waste move
+  const reg = region();
+  for(const k of reg){
+    const [r,c] = k.split(',').map(Number);
+    grid[r][c] = color;
+  }
+  moves++;
+  movesEl.textContent = moves;
+  render();
+  checkState();
+}
+
+function checkState(){
+  const reg = region();
+  if(reg.size === N*N){
+    over = true;
+    msgEl.textContent = `You won in ${moves} moves! 🎉`;
+    msgEl.className = 'msg win';
+    return;
+  }
+  if(moves >= limit){
+    over = true;
+    const pct = Math.round(reg.size / (N*N) * 100);
+    msgEl.textContent = `Out of moves — ${pct}% filled. Try again!`;
+    msgEl.className = 'msg lose';
+  }
+}
+
+// palette buttons
+const pal = document.getElementById('palette');
+COLORS.forEach((col,i)=>{
+  const b = document.createElement('div');
+  b.className = 'swatch';
+  b.style.background = col;
+  b.addEventListener('click', ()=>pick(i));
+  pal.appendChild(b);
+});
+
+document.getElementById('newBtn').addEventListener('click', newGame);
+document.getElementById('startBtn').addEventListener('click', newGame);
+document.getElementById('sizeSel').addEventListener('change', ()=>{ if(!document.getElementById('startOverlay').classList.contains('hidden')) return; newGame(); });
+</script>
+</body>
+</html>

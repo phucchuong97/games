@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkers</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { color: #4ade80; margin: 10px 0 4px; font-size: 28px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 14px; }
+  .panel {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .topbar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .score {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: bold;
+    padding: 6px 14px; border-radius: 8px; background: #0f3460;
+    transition: box-shadow .2s;
+  }
+  .score.active { box-shadow: 0 0 0 2px #fbbf24; }
+  .pc-mini { width: 18px; height: 18px; border-radius: 50%; display:inline-block; }
+  .pc-mini.red { background: #f87171; }
+  .pc-mini.dark { background: #1f2937; border: 1px solid #555; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 56px);
+    grid-template-rows: repeat(8, 56px);
+    border: 4px solid #0f3460;
+    border-radius: 6px;
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .cell.light { background: #cbd5b5; }
+  .cell.dark { background: #4a3626; }
+  .cell.playable { cursor: pointer; }
+  .cell.selected::after {
+    content:''; position:absolute; inset:2px;
+    border: 3px solid #fbbf24; border-radius: 4px; pointer-events:none;
+  }
+  .move-dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #4ade80; opacity:.6;
+    animation: pulse 1.2s infinite; pointer-events:none;
+  }
+  @keyframes pulse { 0%,100%{opacity:.35;} 50%{opacity:.7;} }
+  .piece {
+    width: 42px; height: 42px; border-radius: 50%;
+    position: absolute;
+    box-shadow: 0 3px 5px rgba(0,0,0,.5);
+    transition: left .22s ease, top .22s ease;
+    display:flex; align-items:center; justify-content:center;
+    z-index: 2;
+  }
+  .piece.red { background: radial-gradient(circle at 35% 30%, #fca5a5, #f87171 60%, #dc2626); }
+  .piece.dark { background: radial-gradient(circle at 35% 30%, #4b5563, #1f2937 60%, #0f172a); }
+  .piece.selectable { cursor: pointer; }
+  .crown { font-size: 22px; line-height: 1; }
+  .controls { display: flex; gap: 12px; align-items: center; }
+  button {
+    background: #4ade80; color: #16213e; font-weight: bold;
+    border: none; border-radius: 6px; padding: 9px 18px;
+    font-size: 14px; cursor: pointer; transition: background .15s;
+  }
+  button:hover { background: #22c55e; }
+  #status { color: #60a5fa; font-size: 14px; min-height: 18px; font-weight: bold; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,10,20,.88);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; z-index: 50; text-align: center; padding: 20px;
+  }
+  .overlay h2 { color: #4ade80; font-size: 34px; }
+  .overlay p { color: #94a3b8; max-width: 400px; line-height: 1.5; }
+  .hidden { display: none !important; }
+  #boardWrap { position: relative; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>Checkers</h1>
+<div class="sub">You are Red · AI is Dark</div>
+
+<div class="panel">
+  <div class="topbar">
+    <div class="score" id="scoreRed"><span class="pc-mini red"></span>Red: <span id="cntRed">12</span></div>
+    <div id="status">Your turn</div>
+    <div class="score" id="scoreDark"><span class="pc-mini dark"></span>Dark: <span id="cntDark">12</span></div>
+  </div>
+  <div id="board"></div>
+  <div class="controls">
+    <button id="newGame">New Game</button>
+  </div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h2>Checkers</h2>
+  <p>English draughts. Move diagonally forward; capturing is mandatory and multi-jumps must be completed. Reach the far row to crown a King, which moves both ways. Click a piece to see its moves.</p>
+  <button id="startBtn">Start Game</button>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <h2 id="endTitle">Game Over</h2>
+  <p id="endText"></p>
+  <button id="endBtn">Play Again</button>
+</div>
+
+<script>
+(function(){
+  // Piece encoding: 0 empty; RED man=1, RED king=2, DARK man=3, DARK king=4
+  const EMPTY=0, RM=1, RK=2, DM=3, DK=4;
+  const HUMAN = 'red', AI = 'dark';
+
+  function isRed(p){ return p===RM || p===RK; }
+  function isDark(p){ return p===DM || p===DK; }
+  function isKing(p){ return p===RK || p===DK; }
+  function colorOf(p){ return p===0 ? null : (isRed(p) ? 'red' : 'dark'); }
+
+  let board, current, selected=null, legal=[], busy=false, gameOver=false;
+  let mustContinueFrom = null; // for multi-jump chains (human)
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const cntRedEl = document.getElementById('cntRed');
+  const cntDarkEl = document.getElementById('cntDark');
+  const scoreRedEl = document.getElementById('scoreRed');
+  const scoreDarkEl = document.getElementById('scoreDark');
+
+  function newBoard(){
+    const b = Array.from({length:8},()=>new Array(8).fill(0));
+    for (let r=0;r<3;r++) for (let c=0;c<8;c++) if ((r+c)%2===1) b[r][c]=DM;
+    for (let r=5;r<8;r++) for (let c=0;c<8;c++) if ((r+c)%2===1) b[r][c]=RM;
+    return b;
+  }
+
+  function inside(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+  // Directions a piece can move
+  function dirsFor(p){
+    if (p===RM) return [[-1,-1],[-1,1]];        // red moves up
+    if (p===DM) return [[1,-1],[1,1]];          // dark moves down
+    return [[-1,-1],[-1,1],[1,-1],[1,1]];       // kings
+  }
+
+  // All simple (non-capture) moves for a piece at r,c
+  function simpleMoves(b, r, c){
+    const p = b[r][c];
+    const out = [];
+    for (const [dr,dc] of dirsFor(p)){
+      const nr=r+dr, nc=c+dc;
+      if (inside(nr,nc) && b[nr][nc]===0){
+        out.push({fr:r,fc:c,tr:nr,tc:nc,cap:null});
+      }
+    }
+    return out;
+  }
+
+  // All capture moves (single jump) for a piece at r,c
+  function captureMoves(b, r, c){
+    const p = b[r][c];
+    const col = colorOf(p);
+    const out = [];
+    for (const [dr,dc] of dirsFor(p)){
+      const mr=r+dr, mc=c+dc;      // adjacent (enemy)
+      const lr=r+2*dr, lc=c+2*dc;  // landing
+      if (inside(lr,lc) && b[lr][lc]===0 && inside(mr,mc)){
+        const mid = b[mr][mc];
+        if (mid!==0 && colorOf(mid)!==col){
+          out.push({fr:r,fc:c,tr:lr,tc:lc,cap:[mr,mc]});
+        }
+      }
+    }
+    return out;
+  }
+
+  // Gather all legal moves for a color. Captures mandatory.
+  function allMoves(b, color){
+    const caps = [], simples = [];
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const p=b[r][c];
+      if (p===0 || colorOf(p)!==color) continue;
+      const cm = captureMoves(b, r, c);
+      if (cm.length) caps.push(...cm);
+      else simples.push(...simpleMoves(b, r, c));
+    }
+    // If any captures exist anywhere, only captures are legal
+    return caps.length ? caps : simples;
+  }
+
+  // Apply a single move to a board (mutates). Returns {promoted, becameKing, landed}
+  function applyMove(b, m){
+    const p = b[m.fr][m.fc];
+    b[m.fr][m.fc] = 0;
+    if (m.cap) b[m.cap[0]][m.cap[1]] = 0;
+    let np = p;
+    let promoted = false;
+    if (p===RM && m.tr===0){ np=RK; promoted=true; }
+    else if (p===DM && m.tr===7){ np=DK; promoted=true; }
+    b[m.tr][m.tc] = np;
+    return {promoted};
+  }
+
+  // Continued capture moves from a landing square (same piece)
+  function continuedCaptures(b, r, c){
+    return captureMoves(b, r, c);
+  }
+
+  function counts(b){
+    let red=0, dark=0;
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      if (isRed(b[r][c])) red++; else if (isDark(b[r][c])) dark++;
+    }
+    return {red, dark};
+  }
+
+  // ---------- Rendering ----------
+  function buildBoard(){
+    boardEl.innerHTML='';
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const cell=document.createElement('div');
+      const dark = (r+c)%2===1;
+      cell.className = 'cell ' + (dark?'dark':'light');
+      cell.dataset.r=r; cell.dataset.c=c;
+      if (dark) cell.classList.add('playable');
+      cell.addEventListener('click', ()=>onCellClick(r,c));
+      boardEl.appendChild(cell);
+    }
+    render();
+  }
+
+  function cellAt(r,c){ return boardEl.children[r*8+c]; }
+
+  function render(){
+    // clear decorations & pieces
+    for (const cell of boardEl.children){
+      cell.classList.remove('selected');
+      const dot = cell.querySelector('.move-dot');
+      if (dot) dot.remove();
+      const pc = cell.querySelector('.piece');
+      if (pc) pc.remove();
+    }
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const p=board[r][c];
+      if (p===0) continue;
+      const cell=cellAt(r,c);
+      const pc=document.createElement('div');
+      pc.className='piece '+(isRed(p)?'red':'dark');
+      if (isKing(p)){
+        const cr=document.createElement('span');
+        cr.className='crown'; cr.textContent='♛';
+        cr.style.color = isRed(p) ? '#7f1d1d' : '#fbbf24';
+        pc.appendChild(cr);
+      }
+      // human's movable pieces are selectable when it's their turn
+      if (!busy && !gameOver && current===HUMAN && colorOf(p)===HUMAN){
+        if (pieceHasLegalMove(r,c)) pc.classList.add('selectable');
+      }
+      cell.appendChild(pc);
+    }
+    if (selected){
+      cellAt(selected.r, selected.c).classList.add('selected');
+      for (const m of legal){
+        const cell=cellAt(m.tr,m.tc);
+        const dot=document.createElement('div');
+        dot.className='move-dot';
+        cell.appendChild(dot);
+      }
+    }
+    updateScore();
+  }
+
+  function pieceHasLegalMove(r,c){
+    const moves = allMoves(board, HUMAN);
+    // during a chain, only the continuing piece counts
+    if (mustContinueFrom){
+      return mustContinueFrom.r===r && mustContinueFrom.c===c;
+    }
+    return moves.some(m=>m.fr===r && m.fc===c);
+  }
+
+  function updateScore(){
+    const {red,dark}=counts(board);
+    cntRedEl.textContent=red;
+    cntDarkEl.textContent=dark;
+    scoreRedEl.classList.toggle('active', current===HUMAN && !gameOver);
+    scoreDarkEl.classList.toggle('active', current===AI && !gameOver);
+  }
+
+  // ---------- Human interaction ----------
+  function onCellClick(r,c){
+    if (busy || gameOver || current!==HUMAN) return;
+    const p=board[r][c];
+    // clicking a destination?
+    if (selected){
+      const m = legal.find(mv=>mv.tr===r && mv.tc===c);
+      if (m){ doHumanMove(m); return; }
+    }
+    // select a piece
+    if (p!==0 && colorOf(p)===HUMAN){
+      const moves = allMoves(board, HUMAN);
+      // enforce mandatory capture / chain restriction
+      let pieceMoves = moves.filter(mv=>mv.fr===r && mv.fc===c);
+      if (mustContinueFrom){
+        if (!(mustContinueFrom.r===r && mustContinueFrom.c===c)) return;
+      }
+      if (pieceMoves.length===0) return;
+      selected={r,c};
+      legal=pieceMoves;
+      render();
+    }
+  }
+
+  function doHumanMove(m){
+    busy=true;
+    selected=null; legal=[];
+    const wasKing = isKing(board[m.fr][m.fc]);
+    animateMove(m, ()=>{
+      const res = applyMove(board, m);
+      // check for continued capture
+      if (m.cap && !res.promoted && !wasKing || (m.cap && (res.promoted===false))){
+        // only continue if it was a capture, piece didn't just promote (standard rule: promotion ends turn)
+      }
+      let canContinue = false;
+      if (m.cap && !res.promoted){
+        const more = continuedCaptures(board, m.tr, m.tc);
+        if (more.length){
+          canContinue=true;
+          mustContinueFrom={r:m.tr,c:m.tc};
+          selected={r:m.tr,c:m.tc};
+          legal=more;
+          busy=false;
+          render();
+          statusEl.textContent='Continue jumping!';
+          return;
+        }
+      }
+      mustContinueFrom=null;
+      render();
+      endTurn(HUMAN);
+    });
+  }
+
+  // Animate piece sliding
+  function animateMove(m, done){
+    render();
+    const fromCell=cellAt(m.fr,m.fc);
+    const pc=fromCell.querySelector('.piece');
+    if (!pc){ done(); return; }
+    const toCell=cellAt(m.tr,m.tc);
+    const bRect=boardEl.getBoundingClientRect();
+    const fRect=fromCell.getBoundingClientRect();
+    const tRect=toCell.getBoundingClientRect();
+    // position absolutely relative to board for smooth slide
+    pc.style.position='absolute';
+    pc.style.left=(fRect.left-bRect.left+7)+'px';
+    pc.style.top=(fRect.top-bRect.top+7)+'px';
+    boardEl.appendChild(pc);
+    // capture fade
+    if (m.cap){
+      const capCell=cellAt(m.cap[0],m.cap[1]);
+      const cp=capCell.querySelector('.piece');
+      if (cp){ cp.style.transition='opacity .2s'; cp.style.opacity='0'; }
+    }
+    requestAnimationFrame(()=>{
+      pc.style.left=(tRect.left-bRect.left+7)+'px';
+      pc.style.top=(tRect.top-bRect.top+7)+'px';
+    });
+    setTimeout(done, 240);
+  }
+
+  function endTurn(mover){
+    const next = mover===HUMAN ? AI : HUMAN;
+    current=next;
+    // check game over for next player
+    const nextMoves=allMoves(board, next);
+    if (nextMoves.length===0){
+      finish(mover); // mover wins (opponent stuck)
+      return;
+    }
+    const {red,dark}=counts(board);
+    if (red===0){ finish(AI); return; }
+    if (dark===0){ finish(HUMAN); return; }
+
+    busy=false;
+    if (next===HUMAN){
+      statusEl.textContent = hasCapture(HUMAN) ? 'Your turn — capture available' : 'Your turn';
+      render();
+    } else {
+      statusEl.textContent='AI thinking…';
+      render();
+      busy=true;
+      setTimeout(aiTurn, 380);
+    }
+  }
+
+  function hasCapture(color){
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const p=board[r][c];
+      if (p!==0 && colorOf(p)===color && captureMoves(board,r,c).length) return true;
+    }
+    return false;
+  }
+
+  // ---------- AI ----------
+  function aiTurn(){
+    // Build best full move (possibly a chain) via minimax
+    const best = aiBestMove();
+    if (!best){ finish(HUMAN); return; }
+    playSequence(best, 0);
+  }
+
+  // Execute a chain of steps with animation
+  function playSequence(seq, i){
+    if (i>=seq.length){
+      render();
+      endTurn(AI);
+      return;
+    }
+    const m=seq[i];
+    animateMove(m, ()=>{
+      applyMove(board, m);
+      render();
+      setTimeout(()=>playSequence(seq, i+1), 90);
+    });
+  }
+
+  // Expand all full move sequences for a color (chains for captures)
+  function fullMoves(b, color){
+    const base=allMoves(b, color);
+    const anyCapture = base.some(m=>m.cap);
+    const sequences=[];
+    if (!anyCapture){
+      for (const m of base) sequences.push([m]);
+      return sequences;
+    }
+    // For captures, recursively build chains
+    const capStarts=base.filter(m=>m.cap);
+    for (const m of capStarts){
+      buildChains(b, m, [], sequences);
+    }
+    return sequences;
+  }
+
+  function buildChains(b, move, prefix, out){
+    const nb=b.map(row=>row.slice());
+    const res=applyMove(nb, move);
+    const chain=[...prefix, move];
+    // Promotion ends the turn; otherwise look for more captures
+    if (!res.promoted){
+      const more=captureMoves(nb, move.tr, move.tc);
+      if (more.length){
+        for (const nm of more) buildChains(nb, nm, chain, out);
+        return;
+      }
+    }
+    out.push(chain);
+  }
+
+  function applySequence(b, seq){
+    const nb=b.map(row=>row.slice());
+    for (const m of seq) applyMove(nb, m);
+    return nb;
+  }
+
+  function aiBestMove(){
+    const seqs=fullMoves(board, AI);
+    if (seqs.length===0) return null;
+    let best=null, bestVal=-Infinity;
+    let alpha=-Infinity, beta=Infinity;
+    for (const seq of seqs){
+      const nb=applySequence(board, seq);
+      const val=minimax(nb, 5, alpha, beta, HUMAN);
+      if (val>bestVal){ bestVal=val; best=seq; }
+      if (bestVal>alpha) alpha=bestVal;
+    }
+    return best;
+  }
+
+  function evaluate(b){
+    // AI (dark) perspective
+    let score=0;
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const p=b[r][c];
+      if (p===0) continue;
+      if (p===DM){ score += 100 + r*8; }          // advancement toward row 7
+      else if (p===DK){ score += 175; }
+      else if (p===RM){ score -= 100 + (7-r)*8; }  // red advances toward row 0
+      else if (p===RK){ score -= 175; }
+      // central/back-row bonuses
+      if (p===DM || p===DK){
+        if (c>=2 && c<=5) score += 4;
+      } else {
+        if (c>=2 && c<=5) score -= 4;
+      }
+    }
+    return score;
+  }
+
+  function minimax(b, depth, alpha, beta, color){
+    const {red,dark}=counts(b);
+    if (red===0) return -100000 + (6-depth);   // AI wins
+    if (dark===0) return 100000 - (6-depth);   // human wins
+    if (depth===0) return evaluate(b);
+
+    const seqs=fullMoves(b, color);
+    if (seqs.length===0){
+      // color to move is stuck -> loses
+      return color===AI ? (-100000 + (6-depth)) : (100000 - (6-depth));
+    }
+    if (color===AI){
+      let best=-Infinity;
+      for (const seq of seqs){
+        const nb=applySequence(b, seq);
+        const val=minimax(nb, depth-1, alpha, beta, HUMAN);
+        if (val>best) best=val;
+        if (best>alpha) alpha=best;
+        if (alpha>=beta) break;
+      }
+      return best;
+    } else {
+      let best=Infinity;
+      for (const seq of seqs){
+        const nb=applySequence(b, seq);
+        const val=minimax(nb, depth-1, alpha, beta, AI);
+        if (val<best) best=val;
+        if (best<beta) beta=best;
+        if (alpha>=beta) break;
+      }
+      return best;
+    }
+  }
+
+  // ---------- End / setup ----------
+  function finish(winner){
+    gameOver=true; busy=false;
+    updateScore();
+    const {red,dark}=counts(board);
+    let title, text;
+    if (winner===HUMAN){ title='You Win!'; text=`You captured the AI's pieces. Red ${red} — Dark ${dark}.`; }
+    else { title='AI Wins'; text=`The AI cornered you. Dark ${dark} — Red ${red}.`; }
+    document.getElementById('endTitle').textContent=title;
+    document.getElementById('endText').textContent=text;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    statusEl.textContent='Game over';
+  }
+
+  function start(){
+    board=newBoard();
+    current=HUMAN;
+    selected=null; legal=[]; busy=false; gameOver=false; mustContinueFrom=null;
+    document.getElementById('startOverlay').classList.add('hidden');
+    document.getElementById('endOverlay').classList.add('hidden');
+    buildBoard();
+    statusEl.textContent = hasCapture(HUMAN) ? 'Your turn — capture available' : 'Your turn';
+  }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('newGame').addEventListener('click', start);
+  document.getElementById('endBtn').addEventListener('click', start);
+
+  // idle render behind overlay
+  board=newBoard(); current=HUMAN; gameOver=false;
+  buildBoard();
+})();
+</script>
+</body>
+</html>

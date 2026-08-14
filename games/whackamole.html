@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whack-a-Mole</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { margin: 36px 0 8px; color: #4ade80; }
+  .stats {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 18px;
+    color: #94a3b8;
+    font-size: 15px;
+  }
+  .stats b { color: #e0e0e0; font-size: 20px; }
+  #time.low b { color: #f87171; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    grid-template-rows: repeat(3, 100px);
+    gap: 16px;
+    background: #16213e;
+    border: 3px solid #0f3460;
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .hole {
+    position: relative;
+    width: 100px; height: 100px;
+    background: #0f3460;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: inset 0 8px 14px rgba(0,0,0,0.5);
+  }
+  .critter {
+    position: absolute;
+    left: 8px; right: 8px;
+    bottom: -90px;
+    height: 84px;
+    border-radius: 42px 42px 20px 20px;
+    transition: bottom 0.12s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+  }
+  .critter.up { bottom: 6px; }
+  .critter.mole { background: #a16207; }
+  .critter.bomb { background: #334155; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 26px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 22px;
+  }
+  button:hover { background: #22c55e; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 20, 40, 0.92);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 20; text-align: center;
+    padding: 20px;
+  }
+  .overlay h2 { color: #4ade80; margin: 0 0 10px; font-size: 30px; }
+  .overlay p { color: #94a3b8; max-width: 360px; line-height: 1.5; margin: 4px 0; }
+  .overlay .big { color: #fbbf24; font-size: 40px; font-weight: bold; margin: 10px 0; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<div class="overlay" id="startOverlay">
+  <h2>Whack-a-Mole</h2>
+  <p>Click the moles 🐹 to score points.</p>
+  <p>Avoid the bombs 💣 — they cost you 3 points!</p>
+  <p>You have 30 seconds. The pace quickens as time runs down.</p>
+  <button id="beginBtn">Start Game</button>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <h2>Time's Up!</h2>
+  <div class="big" id="finalScore">0</div>
+  <p id="finalMsg"></p>
+  <button id="againBtn">Play Again</button>
+</div>
+
+<h1>Whack-a-Mole</h1>
+<div class="stats">
+  <div>Score <b id="score">0</b></div>
+  <div id="time">Time <b id="timeVal">30</b></div>
+  <div>Best <b id="best">0</b></div>
+</div>
+<div class="grid" id="grid"></div>
+<button id="restartBtn">Restart</button>
+
+<script>
+(function () {
+  const grid = document.getElementById('grid');
+  const scoreEl = document.getElementById('score');
+  const timeValEl = document.getElementById('timeVal');
+  const timeWrap = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const startOverlay = document.getElementById('startOverlay');
+  const endOverlay = document.getElementById('endOverlay');
+  const beginBtn = document.getElementById('beginBtn');
+  const againBtn = document.getElementById('againBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const finalScore = document.getElementById('finalScore');
+  const finalMsg = document.getElementById('finalMsg');
+
+  const HOLES = 9;
+  const GAME_TIME = 30;
+  let critters = [];
+  let score = 0;
+  let timeLeft = GAME_TIME;
+  let running = false;
+  let best = parseInt(localStorage.getItem('whackHigh') || '0', 10);
+  bestEl.textContent = best;
+
+  let countdownTimer = null;
+  let spawnTimer = null;
+  const activeHoles = new Set(); // hole indices currently occupied
+
+  function buildGrid() {
+    grid.innerHTML = '';
+    critters = [];
+    for (let i = 0; i < HOLES; i++) {
+      const hole = document.createElement('div');
+      hole.className = 'hole';
+      const critter = document.createElement('div');
+      critter.className = 'critter';
+      hole.appendChild(critter);
+      hole.addEventListener('click', () => hit(i));
+      grid.appendChild(hole);
+      critters.push(critter);
+    }
+  }
+
+  function elapsedFactor() {
+    // 0 at start -> 1 at end
+    return (GAME_TIME - timeLeft) / GAME_TIME;
+  }
+
+  function upDuration() {
+    // ~900ms early, ~450ms late
+    return Math.round(900 - elapsedFactor() * 450);
+  }
+
+  function spawnInterval() {
+    // ~750ms early, ~380ms late
+    return Math.round(750 - elapsedFactor() * 370);
+  }
+
+  function pickFreeHole() {
+    const free = [];
+    for (let i = 0; i < HOLES; i++) if (!activeHoles.has(i)) free.push(i);
+    if (!free.length) return -1;
+    return free[Math.floor(Math.random() * free.length)];
+  }
+
+  function spawn() {
+    if (!running) return;
+    const idx = pickFreeHole();
+    if (idx !== -1) {
+      const isBomb = Math.random() < 0.2;
+      const c = critters[idx];
+      c.classList.remove('mole', 'bomb');
+      c.classList.add(isBomb ? 'bomb' : 'mole');
+      c.textContent = isBomb ? '💣' : '🐹';
+      c.dataset.type = isBomb ? 'bomb' : 'mole';
+      c.dataset.live = '1';
+      activeHoles.add(idx);
+      // force reflow so transition plays
+      void c.offsetHeight;
+      c.classList.add('up');
+      const dur = upDuration();
+      setTimeout(() => retract(idx), dur);
+    }
+    spawnTimer = setTimeout(spawn, spawnInterval());
+  }
+
+  function retract(idx) {
+    const c = critters[idx];
+    c.classList.remove('up');
+    c.dataset.live = '0';
+    setTimeout(() => activeHoles.delete(idx), 130);
+  }
+
+  function hit(idx) {
+    if (!running) return;
+    const c = critters[idx];
+    if (c.dataset.live !== '1') return;
+    const type = c.dataset.type;
+    if (type === 'bomb') {
+      score = Math.max(0, score - 3);
+    } else {
+      score += 1;
+    }
+    scoreEl.textContent = score;
+    // whacked: retract immediately
+    c.dataset.live = '0';
+    c.classList.remove('up');
+    setTimeout(() => activeHoles.delete(idx), 130);
+  }
+
+  function tick() {
+    timeLeft--;
+    timeValEl.textContent = timeLeft;
+    if (timeLeft <= 5) timeWrap.classList.add('low');
+    if (timeLeft <= 0) endGame();
+  }
+
+  function start() {
+    clearInterval(countdownTimer);
+    clearTimeout(spawnTimer);
+    activeHoles.clear();
+    buildGrid();
+    score = 0;
+    timeLeft = GAME_TIME;
+    running = true;
+    scoreEl.textContent = '0';
+    timeValEl.textContent = timeLeft;
+    timeWrap.classList.remove('low');
+    startOverlay.classList.add('hidden');
+    endOverlay.classList.add('hidden');
+    countdownTimer = setInterval(tick, 1000);
+    spawn();
+  }
+
+  function endGame() {
+    running = false;
+    clearInterval(countdownTimer);
+    clearTimeout(spawnTimer);
+    critters.forEach(c => c.classList.remove('up'));
+    activeHoles.clear();
+    let newBest = false;
+    if (score > best) {
+      best = score;
+      localStorage.setItem('whackHigh', String(best));
+      bestEl.textContent = best;
+      newBest = true;
+    }
+    finalScore.textContent = score;
+    finalMsg.textContent = newBest ? 'New high score!' : 'Best: ' + best;
+    endOverlay.classList.remove('hidden');
+  }
+
+  buildGrid();
+  beginBtn.addEventListener('click', start);
+  againBtn.addEventListener('click', start);
+  restartBtn.addEventListener('click', start);
+})();
+</script>
+</body>
+</html>

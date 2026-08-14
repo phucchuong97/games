@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mastermind</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { margin: 36px 0 4px; color: #4ade80; }
+  .sub { color: #94a3b8; font-size: 14px; margin-bottom: 16px; }
+  .board {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    opacity: 0.4;
+  }
+  .row.current { opacity: 1; }
+  .row.done { opacity: 1; }
+  .slots { display: flex; gap: 8px; }
+  .slot {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: #0f3460;
+    border: 2px solid #1a1a2e;
+    cursor: default;
+  }
+  .row.current .slot { cursor: pointer; }
+  .feedback {
+    display: grid;
+    grid-template-columns: repeat(2, 12px);
+    grid-template-rows: repeat(2, 12px);
+    gap: 3px;
+    width: 27px;
+  }
+  .key {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #0f3460;
+  }
+  .key.black { background: #e0e0e0; }
+  .key.white { background: #94a3b8; opacity: 0.6; }
+  .rownum { width: 22px; text-align: right; color: #94a3b8; font-size: 13px; }
+  .palette {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .peg {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.15);
+    transition: transform 0.08s;
+  }
+  .peg:hover { transform: scale(1.12); }
+  .controls { margin-top: 18px; display: flex; gap: 12px; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 11px 22px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  button:hover { background: #22c55e; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.secondary { background: #60a5fa; }
+  button.secondary:hover { background: #3b82f6; }
+  .msg { margin-top: 16px; height: 24px; font-size: 16px; font-weight: bold; }
+  .secretRow { margin-top: 10px; display: flex; gap: 8px; align-items: center; color: #94a3b8; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 20, 40, 0.92);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 20; text-align: center;
+    padding: 20px;
+  }
+  .overlay h2 { color: #4ade80; margin-bottom: 8px; }
+  .overlay p { color: #94a3b8; max-width: 380px; line-height: 1.5; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<div class="overlay" id="overlay">
+  <h2>Mastermind</h2>
+  <p>Crack the secret code of 4 colored pegs. You have 10 guesses.
+     Pick colors to fill a row, then Submit.
+     White pin = correct color, wrong spot. Black/white pins don't reveal position.
+     Full peg (light) = right color AND spot.</p>
+  <button id="beginBtn" style="margin-top:20px;">Start Game</button>
+</div>
+
+<h1>Mastermind</h1>
+<div class="sub">Guess the 4-peg code · 6 colors · repeats allowed</div>
+<div class="board" id="board"></div>
+
+<div class="palette" id="palette"></div>
+<div class="controls">
+  <button id="submitBtn">Submit</button>
+  <button id="clearBtn" class="secondary">Clear Row</button>
+  <button id="newBtn" class="secondary">New Game</button>
+</div>
+<div class="msg" id="msg"></div>
+<div class="secretRow hidden" id="secretRow"></div>
+
+<script>
+(function () {
+  const COLORS = ['#ef4444', '#3b82f6', '#eab308', '#22c55e', '#f97316', '#a855f7'];
+  const MAX_ROWS = 10;
+  const CODE_LEN = 4;
+
+  const board = document.getElementById('board');
+  const palette = document.getElementById('palette');
+  const msg = document.getElementById('msg');
+  const secretRow = document.getElementById('secretRow');
+  const submitBtn = document.getElementById('submitBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const newBtn = document.getElementById('newBtn');
+  const overlay = document.getElementById('overlay');
+  const beginBtn = document.getElementById('beginBtn');
+
+  let secret = [];
+  let currentRow = 0;
+  let guess = [];
+  let selectedColor = 0;
+  let gameActive = false;
+  let rowEls = [];
+
+  function buildPalette() {
+    palette.innerHTML = '';
+    COLORS.forEach((c, i) => {
+      const p = document.createElement('div');
+      p.className = 'peg';
+      p.style.background = c;
+      p.addEventListener('click', () => placeColor(i));
+      palette.appendChild(p);
+    });
+  }
+
+  function buildBoard() {
+    board.innerHTML = '';
+    rowEls = [];
+    for (let r = 0; r < MAX_ROWS; r++) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const num = document.createElement('div');
+      num.className = 'rownum';
+      num.textContent = (r + 1);
+      const slots = document.createElement('div');
+      slots.className = 'slots';
+      const slotEls = [];
+      for (let s = 0; s < CODE_LEN; s++) {
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+        slot.addEventListener('click', () => {
+          if (gameActive && r === currentRow) placeAt(s);
+        });
+        slots.appendChild(slot);
+        slotEls.push(slot);
+      }
+      const fb = document.createElement('div');
+      fb.className = 'feedback';
+      const keyEls = [];
+      for (let k = 0; k < CODE_LEN; k++) {
+        const key = document.createElement('div');
+        key.className = 'key';
+        fb.appendChild(key);
+        keyEls.push(key);
+      }
+      row.appendChild(num);
+      row.appendChild(slots);
+      row.appendChild(fb);
+      board.appendChild(row);
+      rowEls.push({ row, slotEls, keyEls });
+    }
+  }
+
+  function placeColor(colorIdx) {
+    if (!gameActive) return;
+    selectedColor = colorIdx;
+    // fill first empty slot in current row
+    const empty = guess.indexOf(-1);
+    if (empty !== -1) {
+      guess[empty] = colorIdx;
+      renderGuess();
+    }
+  }
+
+  function placeAt(slotIdx) {
+    guess[slotIdx] = selectedColor;
+    renderGuess();
+  }
+
+  function renderGuess() {
+    const { slotEls } = rowEls[currentRow];
+    slotEls.forEach((el, i) => {
+      el.style.background = guess[i] === -1 ? '#0f3460' : COLORS[guess[i]];
+    });
+  }
+
+  function scoreGuess(g) {
+    let black = 0, white = 0;
+    const secretRemain = [];
+    const guessRemain = [];
+    for (let i = 0; i < CODE_LEN; i++) {
+      if (g[i] === secret[i]) {
+        black++;
+      } else {
+        secretRemain.push(secret[i]);
+        guessRemain.push(g[i]);
+      }
+    }
+    // count whites without over-counting duplicates
+    for (let i = 0; i < guessRemain.length; i++) {
+      const idx = secretRemain.indexOf(guessRemain[i]);
+      if (idx !== -1) {
+        white++;
+        secretRemain.splice(idx, 1);
+      }
+    }
+    return { black, white };
+  }
+
+  function renderFeedback(row, black, white) {
+    const { keyEls } = rowEls[row];
+    let k = 0;
+    for (let i = 0; i < black; i++) keyEls[k++].classList.add('black');
+    for (let i = 0; i < white; i++) keyEls[k++].classList.add('white');
+  }
+
+  function submit() {
+    if (!gameActive) return;
+    if (guess.indexOf(-1) !== -1) {
+      msg.style.color = '#fbbf24';
+      msg.textContent = 'Fill all 4 slots first';
+      return;
+    }
+    const { black, white } = scoreGuess(guess);
+    renderFeedback(currentRow, black, white);
+    rowEls[currentRow].row.classList.remove('current');
+    rowEls[currentRow].row.classList.add('done');
+
+    if (black === CODE_LEN) {
+      win();
+      return;
+    }
+    currentRow++;
+    if (currentRow >= MAX_ROWS) {
+      lose();
+      return;
+    }
+    guess = [-1, -1, -1, -1];
+    rowEls[currentRow].row.classList.add('current');
+    msg.style.color = '#94a3b8';
+    msg.textContent = (MAX_ROWS - currentRow) + ' guesses left';
+  }
+
+  function revealSecret() {
+    secretRow.classList.remove('hidden');
+    secretRow.innerHTML = '<span>Code:</span>';
+    secret.forEach(c => {
+      const d = document.createElement('div');
+      d.className = 'slot';
+      d.style.background = COLORS[c];
+      d.style.cursor = 'default';
+      secretRow.appendChild(d);
+    });
+  }
+
+  function win() {
+    gameActive = false;
+    msg.style.color = '#4ade80';
+    msg.textContent = 'You cracked it in ' + (currentRow + 1) + ' guesses!';
+    revealSecret();
+  }
+
+  function lose() {
+    gameActive = false;
+    msg.style.color = '#f87171';
+    msg.textContent = 'Out of guesses! The code was:';
+    revealSecret();
+  }
+
+  function newGame() {
+    secret = [];
+    for (let i = 0; i < CODE_LEN; i++) secret.push(Math.floor(Math.random() * COLORS.length));
+    currentRow = 0;
+    guess = [-1, -1, -1, -1];
+    selectedColor = 0;
+    gameActive = true;
+    secretRow.classList.add('hidden');
+    buildBoard();
+    rowEls[0].row.classList.add('current');
+    msg.style.color = '#94a3b8';
+    msg.textContent = '10 guesses left';
+  }
+
+  buildPalette();
+  buildBoard();
+
+  submitBtn.addEventListener('click', submit);
+  clearBtn.addEventListener('click', () => {
+    if (!gameActive) return;
+    guess = [-1, -1, -1, -1];
+    renderGuess();
+  });
+  newBtn.addEventListener('click', newGame);
+  beginBtn.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    newGame();
+  });
+})();
+</script>
+</body>
+</html>

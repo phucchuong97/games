@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Match-3</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    user-select: none;
+  }
+  h1 { color: #4ade80; margin: 24px 0 8px; }
+  .panel {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 12px;
+  }
+  .stats {
+    display: flex;
+    gap: 28px;
+    justify-content: center;
+    margin-bottom: 8px;
+    font-size: 15px;
+  }
+  .stats b { color: #fbbf24; }
+  .stats .hs b { color: #60a5fa; }
+  .stats .time b { color: #f87171; }
+  #boardWrap { position: relative; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 50px);
+    grid-template-rows: repeat(8, 50px);
+    gap: 4px;
+    background: #0f3460;
+    padding: 6px;
+    border-radius: 8px;
+  }
+  .gem {
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.2s ease;
+    position: relative;
+  }
+  .gem.selected {
+    outline: 3px solid #fff;
+    outline-offset: -3px;
+    transform: scale(0.9);
+  }
+  .gem.clearing {
+    transform: scale(0.1);
+    opacity: 0;
+  }
+  .gem.falling { transition: transform 0.22s ease, opacity 0.2s ease; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 15px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #22c55e; }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,12,25,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 10;
+    text-align: center;
+  }
+  .overlay h2 { color: #4ade80; font-size: 34px; margin: 0; }
+  .overlay p { color: #94a3b8; margin: 0; font-size: 16px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>Match-3</h1>
+<div class="stats">
+  <div class="score">Score: <b id="score">0</b></div>
+  <div class="time">Time: <b id="time">60</b>s</div>
+  <div class="hs">Best: <b id="high">0</b></div>
+</div>
+<div class="panel">
+  <div id="boardWrap"><div id="board"></div></div>
+</div>
+<button id="newGame">New Game</button>
+
+<div class="overlay" id="startOverlay">
+  <h2>Match-3</h2>
+  <p>Swap adjacent gems to make rows of 3 or more.<br>Score as much as you can in 60 seconds!</p>
+  <button id="startBtn">Start</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+  <h2>Time's Up!</h2>
+  <p id="finalMsg"></p>
+  <button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const SIZE = 8;
+const COLORS = ['#f87171','#fbbf24','#4ade80','#60a5fa','#c084fc','#f472b6'];
+const EMOJI = ['🔴','🟡','🟢','🔵','🟣','🌸'];
+const boardEl = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const highEl = document.getElementById('high');
+
+let grid = [];       // grid[r][c] = color index or -1
+let cells = [];      // DOM elements
+let score = 0;
+let timeLeft = 60;
+let timer = null;
+let selected = null; // {r,c}
+let busy = false;
+let running = false;
+
+let high = parseInt(localStorage.getItem('match3High') || '0', 10);
+highEl.textContent = high;
+
+function rc(r,c){ return r*SIZE + c; }
+
+function buildDom(){
+  boardEl.innerHTML = '';
+  cells = [];
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const d = document.createElement('div');
+      d.className = 'gem';
+      d.dataset.r = r; d.dataset.c = c;
+      d.addEventListener('click', ()=>onClick(r,c));
+      boardEl.appendChild(d);
+      cells.push(d);
+    }
+  }
+}
+
+function paint(){
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const el = cells[rc(r,c)];
+      const v = grid[r][c];
+      if(v < 0){ el.style.background = 'transparent'; el.textContent=''; }
+      else {
+        el.style.background = COLORS[v];
+        el.textContent = '';
+      }
+      el.classList.remove('selected','clearing');
+    }
+  }
+}
+
+function randGem(){ return Math.floor(Math.random()*COLORS.length); }
+
+// Create board with no initial matches
+function newBoard(){
+  grid = [];
+  for(let r=0;r<SIZE;r++){
+    grid.push([]);
+    for(let c=0;c<SIZE;c++){
+      let v;
+      let tries = 0;
+      do {
+        v = randGem();
+        tries++;
+      } while(tries < 50 && (
+        (c>=2 && grid[r][c-1]===v && grid[r][c-2]===v) ||
+        (r>=2 && grid[r-1][c]===v && grid[r-2][c]===v)
+      ));
+      grid[r][c] = v;
+    }
+  }
+}
+
+function findMatches(){
+  const matched = new Set();
+  // horizontal
+  for(let r=0;r<SIZE;r++){
+    let run = 1;
+    for(let c=1;c<=SIZE;c++){
+      if(c<SIZE && grid[r][c]===grid[r][c-1] && grid[r][c]>=0){
+        run++;
+      } else {
+        if(run>=3){ for(let k=c-run;k<c;k++) matched.add(rc(r,k)); }
+        run = 1;
+      }
+    }
+  }
+  // vertical
+  for(let c=0;c<SIZE;c++){
+    let run = 1;
+    for(let r=1;r<=SIZE;r++){
+      if(r<SIZE && grid[r][c]===grid[r-1][c] && grid[r][c]>=0){
+        run++;
+      } else {
+        if(run>=3){ for(let k=r-run;k<r;k++) matched.add(rc(k,c)); }
+        run = 1;
+      }
+    }
+  }
+  return matched;
+}
+
+function areAdjacent(a,b){
+  return (Math.abs(a.r-b.r)===1 && a.c===b.c) || (Math.abs(a.c-b.c)===1 && a.r===b.r);
+}
+
+function swap(a,b){
+  const t = grid[a.r][a.c];
+  grid[a.r][a.c] = grid[b.r][b.c];
+  grid[b.r][b.c] = t;
+}
+
+function onClick(r,c){
+  if(busy || !running) return;
+  if(!selected){
+    selected = {r,c};
+    cells[rc(r,c)].classList.add('selected');
+    return;
+  }
+  if(selected.r===r && selected.c===c){
+    cells[rc(r,c)].classList.remove('selected');
+    selected = null;
+    return;
+  }
+  if(areAdjacent(selected,{r,c})){
+    const a = selected, b = {r,c};
+    cells[rc(a.r,a.c)].classList.remove('selected');
+    selected = null;
+    doSwap(a,b);
+  } else {
+    cells[rc(selected.r,selected.c)].classList.remove('selected');
+    selected = {r,c};
+    cells[rc(r,c)].classList.add('selected');
+  }
+}
+
+async function doSwap(a,b){
+  busy = true;
+  swap(a,b);
+  paint();
+  await wait(160);
+  const matches = findMatches();
+  if(matches.size===0){
+    // swap back
+    swap(a,b);
+    paint();
+    await wait(160);
+    busy = false;
+    return;
+  }
+  await resolveCascades();
+  busy = false;
+}
+
+async function resolveCascades(){
+  let cascade = 0;
+  while(true){
+    const matches = findMatches();
+    if(matches.size===0) break;
+    cascade++;
+    // score: base per gem, bonus for size, cascade multiplier
+    const gained = Math.round((matches.size * 10 + (matches.size-3)*15) * cascade);
+    score += gained;
+    scoreEl.textContent = score;
+    // animate clear
+    matches.forEach(i=>{
+      cells[i].classList.add('clearing');
+    });
+    await wait(220);
+    // remove matched
+    matches.forEach(i=>{
+      const r = Math.floor(i/SIZE), c = i%SIZE;
+      grid[r][c] = -1;
+    });
+    // gravity
+    collapse();
+    paint();
+    await wait(220);
+  }
+}
+
+function collapse(){
+  for(let c=0;c<SIZE;c++){
+    let write = SIZE-1;
+    for(let r=SIZE-1;r>=0;r--){
+      if(grid[r][c]>=0){
+        grid[write][c] = grid[r][c];
+        if(write!==r) grid[r][c] = -1;
+        write--;
+      }
+    }
+    // fill top
+    for(let r=write;r>=0;r--){
+      grid[r][c] = randGem();
+    }
+  }
+}
+
+function wait(ms){ return new Promise(res=>setTimeout(res,ms)); }
+
+function startGame(){
+  score = 0; scoreEl.textContent = 0;
+  timeLeft = 60; timeEl.textContent = 60;
+  selected = null; busy = false;
+  newBoard();
+  paint();
+  running = true;
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  clearInterval(timer);
+  timer = setInterval(()=>{
+    timeLeft--;
+    timeEl.textContent = timeLeft;
+    if(timeLeft<=0) endGame();
+  }, 1000);
+}
+
+function endGame(){
+  clearInterval(timer);
+  running = false;
+  if(score>high){
+    high = score;
+    localStorage.setItem('match3High', String(high));
+    highEl.textContent = high;
+  }
+  document.getElementById('finalMsg').textContent =
+    `Score: ${score}  •  Best: ${high}`;
+  document.getElementById('endOverlay').classList.remove('hidden');
+}
+
+buildDom();
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('newGame').addEventListener('click', startGame);
+</script>
+</body>
+</html>

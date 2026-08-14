@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dots and Boxes</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { color: #60a5fa; margin: 6px 0 14px; letter-spacing: 1px; }
+  .panel {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin-bottom: 18px;
+    text-align: center;
+    max-width: 560px;
+    width: 100%;
+  }
+  .scores { display: flex; justify-content: center; gap: 26px; margin-bottom: 10px; }
+  .score {
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: #0f3460;
+    font-weight: bold;
+    font-size: 15px;
+    border: 2px solid transparent;
+  }
+  .score.you { color: #60a5fa; }
+  .score.ai { color: #f87171; }
+  .score.active { border-color: currentColor; box-shadow: 0 0 8px rgba(96,165,250,0.2); }
+  .status { min-height: 22px; font-size: 15px; margin-bottom: 8px; color: #e0e0e0; }
+  .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; align-items: center; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  button:hover { background: #22c55e; }
+  label { color: #94a3b8; font-size: 13px; }
+  select {
+    background: #0f3460; color: #e0e0e0; border: 1px solid #1e4a7a;
+    border-radius: 5px; padding: 6px 8px; font-size: 13px;
+  }
+  .board-wrap {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 22px;
+  }
+  svg { display: block; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,12,25,0.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  .overlay .card {
+    background: #16213e; border: 1px solid #0f3460; border-radius: 12px;
+    padding: 34px 40px; text-align: center; max-width: 440px;
+  }
+  .overlay h2 { color: #60a5fa; margin-top: 0; }
+  .overlay p { color: #94a3b8; line-height: 1.5; }
+  .hide { display: none; }
+  /* svg edges */
+  .edge { stroke: #0f3460; stroke-width: 6; stroke-linecap: round; cursor: pointer; transition: stroke 0.1s; }
+  .edge.open:hover { stroke: #1e4a7a; }
+  .edge.drawn-you { stroke: #60a5fa; cursor: default; }
+  .edge.drawn-ai { stroke: #f87171; cursor: default; }
+  .edge.hint { stroke: #2b3a55; }
+  .dot { fill: #94a3b8; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>▦ Dots and Boxes</h1>
+
+<div class="panel">
+  <div class="scores">
+    <div class="score you active" id="scoreYou">You: 0</div>
+    <div class="score ai" id="scoreAi">AI: 0</div>
+  </div>
+  <div class="status" id="status">Your turn — draw an edge.</div>
+  <div class="controls">
+    <label>Size:
+      <select id="sizeSel">
+        <option value="3">3 × 3</option>
+        <option value="4">4 × 4</option>
+        <option value="5" selected>5 × 5</option>
+      </select>
+    </label>
+    <button id="newGameBtn">New Game</button>
+  </div>
+</div>
+
+<div class="board-wrap">
+  <svg id="board"></svg>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h2>▦ Dots and Boxes</h2>
+    <p>Take turns drawing edges between dots. Complete the 4th side of a box to claim it and earn another turn. Most boxes wins!</p>
+    <button id="ovBtn">Start Game</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const GAP = 70;      // px between dots
+  const PAD = 26;
+  const DOT_R = 5;
+
+  let N = 5;                 // boxes per side
+  // edges: use maps keyed by string.
+  // Horizontal edge: top side of box, identified by (row, col) where row in [0..N], col in [0..N-1]
+  // Vertical edge: left side, (row,col) row in [0..N-1], col in [0..N]
+  let hEdges, vEdges;        // owner: null | 'you' | 'ai'
+  let boxes;                 // owner: null|'you'|'ai'
+  let turn;                  // 'you' | 'ai'
+  let scoreYou, scoreAi;
+  let totalBoxes;
+  let claimed;
+  let busy = false;
+
+  const board = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const scoreYouEl = document.getElementById('scoreYou');
+  const scoreAiEl = document.getElementById('scoreAi');
+  const sizeSel = document.getElementById('sizeSel');
+  const newGameBtn = document.getElementById('newGameBtn');
+  const overlay = document.getElementById('overlay');
+  const ovBtn = document.getElementById('ovBtn');
+
+  function hKey(r,c){ return 'h_'+r+'_'+c; }
+  function vKey(r,c){ return 'v_'+r+'_'+c; }
+
+  function init(){
+    N = parseInt(sizeSel.value,10);
+    hEdges = {}; vEdges = {}; boxes = {};
+    for (let r=0;r<=N;r++) for (let c=0;c<N;c++) hEdges[hKey(r,c)] = null;
+    for (let r=0;r<N;r++) for (let c=0;c<=N;c++) vEdges[vKey(r,c)] = null;
+    for (let r=0;r<N;r++) for (let c=0;c<N;c++) boxes[r+'_'+c] = null;
+    turn = 'you';
+    scoreYou = 0; scoreAi = 0;
+    totalBoxes = N*N; claimed = 0;
+    busy = false;
+    render();
+    updateScores();
+    statusEl.textContent = 'Your turn — draw an edge.';
+  }
+
+  function render(){
+    const dim = PAD*2 + GAP*N;
+    board.setAttribute('width', dim);
+    board.setAttribute('height', dim);
+    board.setAttribute('viewBox', '0 0 '+dim+' '+dim);
+    board.innerHTML = '';
+
+    // box fills first (background)
+    for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+      const owner = boxes[r+'_'+c];
+      const rect = document.createElementNS(SVG_NS,'rect');
+      rect.setAttribute('x', PAD + c*GAP);
+      rect.setAttribute('y', PAD + r*GAP);
+      rect.setAttribute('width', GAP);
+      rect.setAttribute('height', GAP);
+      rect.setAttribute('fill', owner==='you' ? 'rgba(96,165,250,0.25)' : owner==='ai' ? 'rgba(248,113,113,0.25)' : 'transparent');
+      board.appendChild(rect);
+      if (owner){
+        const t = document.createElementNS(SVG_NS,'text');
+        t.setAttribute('x', PAD + c*GAP + GAP/2);
+        t.setAttribute('y', PAD + r*GAP + GAP/2 + 6);
+        t.setAttribute('text-anchor','middle');
+        t.setAttribute('font-size','18');
+        t.setAttribute('font-weight','bold');
+        t.setAttribute('fill', owner==='you' ? '#60a5fa' : '#f87171');
+        t.textContent = owner==='you' ? 'You' : 'AI';
+        board.appendChild(t);
+      }
+    }
+
+    // horizontal edges
+    for (let r=0;r<=N;r++) for (let c=0;c<N;c++){
+      const owner = hEdges[hKey(r,c)];
+      const line = document.createElementNS(SVG_NS,'line');
+      line.setAttribute('x1', PAD + c*GAP);
+      line.setAttribute('y1', PAD + r*GAP);
+      line.setAttribute('x2', PAD + (c+1)*GAP);
+      line.setAttribute('y2', PAD + r*GAP);
+      line.setAttribute('class', edgeClass(owner));
+      if (!owner){
+        line.addEventListener('click', ()=> humanMove('h',r,c));
+      }
+      board.appendChild(line);
+    }
+    // vertical edges
+    for (let r=0;r<N;r++) for (let c=0;c<=N;c++){
+      const owner = vEdges[vKey(r,c)];
+      const line = document.createElementNS(SVG_NS,'line');
+      line.setAttribute('x1', PAD + c*GAP);
+      line.setAttribute('y1', PAD + r*GAP);
+      line.setAttribute('x2', PAD + c*GAP);
+      line.setAttribute('y2', PAD + (r+1)*GAP);
+      line.setAttribute('class', edgeClass(owner));
+      if (!owner){
+        line.addEventListener('click', ()=> humanMove('v',r,c));
+      }
+      board.appendChild(line);
+    }
+
+    // dots on top
+    for (let r=0;r<=N;r++) for (let c=0;c<=N;c++){
+      const dot = document.createElementNS(SVG_NS,'circle');
+      dot.setAttribute('cx', PAD + c*GAP);
+      dot.setAttribute('cy', PAD + r*GAP);
+      dot.setAttribute('r', DOT_R);
+      dot.setAttribute('class','dot');
+      board.appendChild(dot);
+    }
+  }
+
+  function edgeClass(owner){
+    if (owner==='you') return 'edge drawn-you';
+    if (owner==='ai') return 'edge drawn-ai';
+    return 'edge open';
+  }
+
+  // count filled sides of a box
+  function boxSides(r,c){
+    let n=0;
+    if (hEdges[hKey(r,c)]) n++;
+    if (hEdges[hKey(r+1,c)]) n++;
+    if (vEdges[vKey(r,c)]) n++;
+    if (vEdges[vKey(r,c+1)]) n++;
+    return n;
+  }
+
+  // Apply an edge for player. Returns number of boxes newly completed.
+  function applyEdge(type, r, c, player){
+    if (type==='h') hEdges[hKey(r,c)] = player;
+    else vEdges[vKey(r,c)] = player;
+
+    let completed = 0;
+    const affected = type==='h'
+      ? [[r-1,c],[r,c]]
+      : [[r,c-1],[r,c]];
+    for (const [br,bc] of affected){
+      if (br<0||br>=N||bc<0||bc>=N) continue;
+      if (boxes[br+'_'+bc]===null && boxSides(br,bc)===4){
+        boxes[br+'_'+bc] = player;
+        completed++;
+        if (player==='you') scoreYou++; else scoreAi++;
+        claimed++;
+      }
+    }
+    return completed;
+  }
+
+  function humanMove(type,r,c){
+    if (busy || turn!=='you') return;
+    const owner = type==='h' ? hEdges[hKey(r,c)] : vEdges[vKey(r,c)];
+    if (owner) return;
+    const completed = applyEdge(type,r,c,'you');
+    render();
+    updateScores();
+    if (claimed >= totalBoxes){ finish(); return; }
+    if (completed>0){
+      statusEl.textContent = 'Box claimed! Go again.';
+      // stay player's turn
+    } else {
+      turn = 'ai';
+      updateScores();
+      statusEl.textContent = 'AI is thinking…';
+      busy = true;
+      setTimeout(aiTurn, 500);
+    }
+  }
+
+  // ---- AI ----
+  function allEdges(){
+    const list = [];
+    for (let r=0;r<=N;r++) for (let c=0;c<N;c++)
+      if (!hEdges[hKey(r,c)]) list.push({type:'h',r,c});
+    for (let r=0;r<N;r++) for (let c=0;c<=N;c++)
+      if (!vEdges[vKey(r,c)]) list.push({type:'v',r,c});
+    return list;
+  }
+
+  // Boxes adjacent to an edge
+  function adjacentBoxes(type,r,c){
+    const res = [];
+    const affected = type==='h' ? [[r-1,c],[r,c]] : [[r,c-1],[r,c]];
+    for (const [br,bc] of affected){
+      if (br<0||br>=N||bc<0||bc>=N) continue;
+      res.push([br,bc]);
+    }
+    return res;
+  }
+
+  // Would placing this edge give opponent a 3-sided box (i.e. create a box with 3 sides)?
+  function createsThreeSide(type,r,c){
+    // temporarily place, check adjacent boxes for exactly 3 sides (not completing to 4)
+    setEdge(type,r,c,'test');
+    let bad = false;
+    for (const [br,bc] of adjacentBoxes(type,r,c)){
+      const s = boxSides(br,bc);
+      if (s===3) { bad = true; break; }
+    }
+    setEdge(type,r,c,null);
+    return bad;
+  }
+
+  function completesBox(type,r,c){
+    setEdge(type,r,c,'test');
+    let count=0;
+    for (const [br,bc] of adjacentBoxes(type,r,c)){
+      if (boxSides(br,bc)===4) count++;
+    }
+    setEdge(type,r,c,null);
+    return count;
+  }
+
+  function setEdge(type,r,c,val){
+    if (type==='h') hEdges[hKey(r,c)] = val;
+    else vEdges[vKey(r,c)] = val;
+  }
+
+  function aiChooseMove(){
+    const edges = allEdges();
+    if (edges.length===0) return null;
+
+    // 1. Take any move that completes a box (greedy — grab the most)
+    let best = null, bestCount = 0;
+    for (const e of edges){
+      const cnt = completesBox(e.type,e.r,e.c);
+      if (cnt>bestCount){ bestCount = cnt; best = e; }
+    }
+    if (best) return best;
+
+    // 2. Safe moves: don't create a 3-sided box for opponent.
+    const safe = edges.filter(e => !createsThreeSide(e.type,e.r,e.c));
+    if (safe.length>0){
+      return safe[Math.floor(Math.random()*safe.length)];
+    }
+
+    // 3. All moves give away boxes — pick the one opening the smallest chain.
+    let minChain = Infinity, sacrifice = edges[0];
+    for (const e of edges){
+      const size = chainSize(e.type,e.r,e.c);
+      if (size < minChain){ minChain = size; sacrifice = e; }
+    }
+    return sacrifice;
+  }
+
+  // Estimate the chain size the move would hand over: count connected boxes
+  // that would become capturable starting from the boxes this edge makes 3-sided.
+  function chainSize(type,r,c){
+    setEdge(type,r,c,'test');
+    let total = 0;
+    const seen = {};
+    for (const [br,bc] of adjacentBoxes(type,r,c)){
+      if (boxSides(br,bc)===3){
+        total += floodChain(br,bc,seen);
+      }
+    }
+    setEdge(type,r,c,null);
+    return total===0 ? 1 : total;
+  }
+
+  // Count boxes in a chain reachable via shared missing edges (boxes with >=3 sides).
+  function floodChain(br,bc,seen){
+    const key = br+'_'+bc;
+    if (seen[key]) return 0;
+    seen[key] = true;
+    let count = 1;
+    // neighbors through open edges
+    const neighbors = [];
+    if (!hEdges[hKey(br,bc)])   neighbors.push([br-1,bc]);   // top open -> box above
+    if (!hEdges[hKey(br+1,bc)]) neighbors.push([br+1,bc]);   // bottom open -> box below
+    if (!vEdges[vKey(br,bc)])   neighbors.push([br,bc-1]);   // left open
+    if (!vEdges[vKey(br,bc+1)]) neighbors.push([br,bc+1]);   // right open
+    for (const [nr,nc] of neighbors){
+      if (nr<0||nr>=N||nc<0||nc>=N) continue;
+      if (boxes[nr+'_'+nc]!==null) continue;
+      if (boxSides(nr,nc)>=2){
+        count += floodChain(nr,nc,seen);
+      }
+    }
+    return count;
+  }
+
+  function aiTurn(){
+    if (claimed >= totalBoxes){ finish(); return; }
+    const move = aiChooseMove();
+    if (!move){ finish(); return; }
+    const completed = applyEdge(move.type,move.r,move.c,'ai');
+    render();
+    updateScores();
+    if (claimed >= totalBoxes){ busy=false; finish(); return; }
+    if (completed>0){
+      statusEl.textContent = 'AI claimed a box! It goes again.';
+      setTimeout(aiTurn, 500);
+    } else {
+      turn = 'you';
+      busy = false;
+      updateScores();
+      statusEl.textContent = 'Your turn — draw an edge.';
+    }
+  }
+
+  function updateScores(){
+    scoreYouEl.textContent = 'You: ' + scoreYou;
+    scoreAiEl.textContent = 'AI: ' + scoreAi;
+    scoreYouEl.classList.toggle('active', turn==='you');
+    scoreAiEl.classList.toggle('active', turn==='ai');
+  }
+
+  function finish(){
+    busy = true;
+    let msg;
+    if (scoreYou > scoreAi) msg = '🏆 You win ' + scoreYou + ' – ' + scoreAi + '!';
+    else if (scoreAi > scoreYou) msg = '🤖 AI wins ' + scoreAi + ' – ' + scoreYou + '.';
+    else msg = "It's a tie, " + scoreYou + ' – ' + scoreAi + '.';
+    statusEl.textContent = msg;
+  }
+
+  newGameBtn.onclick = ()=> init();
+  sizeSel.onchange = ()=> init();
+  ovBtn.onclick = ()=>{ overlay.style.display='none'; init(); };
+
+  // initial render behind overlay
+  init();
+})();
+</script>
+</body>
+</html>

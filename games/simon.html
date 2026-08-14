@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simon</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { margin: 40px 0 8px; color: #4ade80; }
+  .stats {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 18px;
+    color: #94a3b8;
+    font-size: 15px;
+  }
+  .stats b { color: #e0e0e0; font-size: 18px; }
+  .board {
+    position: relative;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: #16213e;
+    border: 6px solid #0f3460;
+    overflow: hidden;
+  }
+  .pad {
+    position: absolute;
+    width: 50%;
+    height: 50%;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.08s ease;
+  }
+  .pad.active { opacity: 1; box-shadow: 0 0 30px rgba(255,255,255,0.6) inset; }
+  .pad.green  { top: 0;    left: 0;    background: #22c55e; border-top-left-radius: 100%; }
+  .pad.red    { top: 0;    right: 0;   background: #ef4444; border-top-right-radius: 100%; }
+  .pad.yellow { bottom: 0; left: 0;    background: #eab308; border-bottom-left-radius: 100%; }
+  .pad.blue   { bottom: 0; right: 0;   background: #3b82f6; border-bottom-right-radius: 100%; }
+  .center {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 96px; height: 96px;
+    margin: -48px 0 0 -48px;
+    background: #16213e;
+    border: 6px solid #0f3460;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 22px;
+    color: #94a3b8;
+    z-index: 5;
+  }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 28px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 22px;
+  }
+  button:hover { background: #22c55e; }
+  .msg { margin-top: 16px; color: #fbbf24; height: 22px; font-size: 15px; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+<h1>Simon</h1>
+<div class="stats">
+  <div>Round <b id="round">0</b></div>
+  <div>Best <b id="best">0</b></div>
+</div>
+<div class="board" id="board">
+  <div class="pad green"  data-i="0"></div>
+  <div class="pad red"    data-i="1"></div>
+  <div class="pad yellow" data-i="2"></div>
+  <div class="pad blue"   data-i="3"></div>
+  <div class="center" id="center">▶</div>
+</div>
+<div class="msg" id="msg">Press Start to play</div>
+<button id="startBtn">Start</button>
+
+<script>
+(function () {
+  const pads = Array.from(document.querySelectorAll('.pad'));
+  const roundEl = document.getElementById('round');
+  const bestEl = document.getElementById('best');
+  const msgEl = document.getElementById('msg');
+  const centerEl = document.getElementById('center');
+  const startBtn = document.getElementById('startBtn');
+
+  const FREQS = [329.63, 261.63, 220.0, 164.81]; // green, red, yellow, blue
+  let sequence = [];
+  let playerPos = 0;
+  let acceptingInput = false;
+  let best = parseInt(localStorage.getItem('simonHigh') || '0', 10);
+  bestEl.textContent = best;
+
+  let audioCtx = null;
+  function getCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function tone(i, duration) {
+    try {
+      const ctx = getCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = FREQS[i];
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration / 1000);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration / 1000 + 0.02);
+    } catch (e) {}
+  }
+
+  function flash(i, duration) {
+    pads[i].classList.add('active');
+    tone(i, duration);
+    setTimeout(() => pads[i].classList.remove('active'), duration);
+  }
+
+  function speed() {
+    // starts ~600ms, quickens as sequence grows, min 250ms
+    return Math.max(250, 600 - sequence.length * 25);
+  }
+
+  function playSequence() {
+    acceptingInput = false;
+    centerEl.textContent = '···';
+    const step = speed();
+    let idx = 0;
+    const gap = step + 120;
+    const timer = setInterval(() => {
+      if (idx >= sequence.length) {
+        clearInterval(timer);
+        setTimeout(() => {
+          acceptingInput = true;
+          playerPos = 0;
+          centerEl.textContent = sequence.length;
+          msgEl.textContent = 'Your turn';
+        }, 300);
+        return;
+      }
+      flash(sequence[idx], step);
+      idx++;
+    }, gap);
+  }
+
+  function nextRound() {
+    sequence.push(Math.floor(Math.random() * 4));
+    roundEl.textContent = sequence.length;
+    msgEl.textContent = 'Watch...';
+    setTimeout(playSequence, 700);
+  }
+
+  function gameOver() {
+    acceptingInput = false;
+    const score = sequence.length - 1;
+    if (score > best) {
+      best = score;
+      localStorage.setItem('simonHigh', String(best));
+      bestEl.textContent = best;
+      msgEl.textContent = 'Game over! New best: ' + best;
+    } else {
+      msgEl.textContent = 'Game over! You reached ' + score;
+    }
+    centerEl.textContent = '▶';
+    startBtn.textContent = 'Play Again';
+    startBtn.disabled = false;
+  }
+
+  function handlePress(i) {
+    if (!acceptingInput) return;
+    flash(i, 220);
+    if (sequence[playerPos] === i) {
+      playerPos++;
+      if (playerPos === sequence.length) {
+        acceptingInput = false;
+        msgEl.textContent = 'Nice!';
+        setTimeout(nextRound, 700);
+      }
+    } else {
+      gameOver();
+    }
+  }
+
+  pads.forEach(p => {
+    p.addEventListener('click', () => handlePress(parseInt(p.dataset.i, 10)));
+  });
+
+  function start() {
+    getCtx(); // unlock audio on user gesture
+    sequence = [];
+    playerPos = 0;
+    startBtn.disabled = true;
+    startBtn.textContent = 'Start';
+    roundEl.textContent = '0';
+    nextRound();
+  }
+
+  startBtn.addEventListener('click', start);
+})();
+</script>
+</body>
+</html>

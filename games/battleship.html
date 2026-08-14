@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battleship</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: #60a5fa; margin: 6px 0 14px; letter-spacing: 1px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .boards {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .board-block { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 14px; }
+  .board-title { text-align: center; margin: 0 0 10px; font-size: 15px; color: #94a3b8; font-weight: bold; }
+  .grid {
+    display: grid;
+    grid-template-columns: 18px repeat(10, 30px);
+    grid-template-rows: 18px repeat(10, 30px);
+    gap: 2px;
+  }
+  .cell {
+    width: 30px; height: 30px;
+    background: #0f3460;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    cursor: default;
+    transition: background 0.12s;
+  }
+  .hdr { background: transparent; color: #94a3b8; font-size: 11px; }
+  .enemy .cell.fireable { cursor: crosshair; }
+  .enemy .cell.fireable:hover { background: #1e4a7a; }
+  .cell.ship { background: #4ade80; }
+  .cell.hit { background: #f87171; }
+  .cell.miss { background: #94a3b8; }
+  .cell.sunk { background: #b91c1c; }
+  .cell.preview-ok { background: #22c55e; }
+  .cell.preview-bad { background: #7f1d1d; }
+  .panel {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 0 auto 18px;
+    max-width: 620px;
+    text-align: center;
+  }
+  .status { min-height: 22px; font-size: 15px; margin-bottom: 10px; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    margin: 4px;
+    transition: background 0.12s;
+  }
+  button:hover { background: #22c55e; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.alt { background: #60a5fa; }
+  button.alt:hover { background: #3b82f6; }
+  .fleet-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+  .ship-ind { font-size: 12px; padding: 3px 8px; border-radius: 5px; background: #0f3460; }
+  .ship-ind.dead { text-decoration: line-through; color: #f87171; background: #2a1215; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,12,25,0.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  .overlay .card {
+    background: #16213e; border: 1px solid #0f3460; border-radius: 12px;
+    padding: 34px 40px; text-align: center; max-width: 460px;
+  }
+  .overlay h2 { color: #60a5fa; margin-top: 0; }
+  .overlay p { color: #94a3b8; line-height: 1.5; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<div class="wrap">
+  <h1>⚓ Battleship</h1>
+
+  <div class="panel">
+    <div class="status" id="status">Place your fleet.</div>
+    <div id="placeControls">
+      <button id="rotateBtn">Rotate: Horizontal</button>
+      <button class="alt" id="autoBtn">Auto-place</button>
+      <button id="resetPlaceBtn" class="alt">Clear</button>
+    </div>
+    <div id="playControls" class="hide">
+      <button id="newGameBtn">New Game</button>
+    </div>
+    <div class="fleet-row" id="enemyFleet"></div>
+  </div>
+
+  <div class="boards">
+    <div class="board-block">
+      <div class="board-title">Your Fleet</div>
+      <div class="grid" id="playerGrid"></div>
+    </div>
+    <div class="board-block">
+      <div class="board-title">Enemy Waters</div>
+      <div class="grid enemy" id="enemyGrid"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h2 id="ovTitle">⚓ Battleship</h2>
+    <p id="ovText">Place your 5 ships on your grid, then hunt down the enemy fleet. Use Rotate to change orientation, or Auto-place for a quick setup.</p>
+    <button id="ovBtn">Start Game</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const SIZE = 10;
+  const SHIPS = [
+    {name:'Carrier', len:5},
+    {name:'Battleship', len:4},
+    {name:'Cruiser', len:3},
+    {name:'Submarine', len:3},
+    {name:'Destroyer', len:2},
+  ];
+  const LETTERS = 'ABCDEFGHIJ';
+
+  let playerBoard, enemyBoard;      // 2D arrays: null or shipIndex
+  let playerShips, enemyShips;      // {name,len,cells:[{r,c}],hits:Set-count}
+  let playerShots, enemyShots;      // 2D booleans (fired-upon)
+  let horizontal = true;
+  let placeIndex = 0;
+  let phase = 'place';              // place | play | over
+  let aiTargets = [];               // queue of {r,c} to try
+  let aiHitStack = [];              // cells hit on current target ship
+
+  const playerGridEl = document.getElementById('playerGrid');
+  const enemyGridEl = document.getElementById('enemyGrid');
+  const statusEl = document.getElementById('status');
+  const rotateBtn = document.getElementById('rotateBtn');
+  const autoBtn = document.getElementById('autoBtn');
+  const resetPlaceBtn = document.getElementById('resetPlaceBtn');
+  const placeControls = document.getElementById('placeControls');
+  const playControls = document.getElementById('playControls');
+  const enemyFleetEl = document.getElementById('enemyFleet');
+  const overlay = document.getElementById('overlay');
+  const ovBtn = document.getElementById('ovBtn');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovText = document.getElementById('ovText');
+  const newGameBtn = document.getElementById('newGameBtn');
+
+  function emptyBoard(){ return Array.from({length:SIZE}, ()=>Array(SIZE).fill(null)); }
+  function emptyShots(){ return Array.from({length:SIZE}, ()=>Array(SIZE).fill(false)); }
+
+  function buildGrid(el, isEnemy){
+    el.innerHTML = '';
+    // corner
+    const corner = document.createElement('div');
+    corner.className = 'cell hdr';
+    el.appendChild(corner);
+    for (let c=0;c<SIZE;c++){
+      const h = document.createElement('div');
+      h.className = 'cell hdr';
+      h.textContent = c+1;
+      el.appendChild(h);
+    }
+    for (let r=0;r<SIZE;r++){
+      const rh = document.createElement('div');
+      rh.className = 'cell hdr';
+      rh.textContent = LETTERS[r];
+      el.appendChild(rh);
+      for (let c=0;c<SIZE;c++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        el.appendChild(cell);
+      }
+    }
+  }
+
+  function cellAt(el, r, c){
+    return el.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
+  }
+
+  function init(){
+    playerBoard = emptyBoard();
+    enemyBoard = emptyBoard();
+    playerShips = [];
+    enemyShips = [];
+    playerShots = emptyShots();
+    enemyShots = emptyShots();
+    horizontal = true;
+    placeIndex = 0;
+    phase = 'place';
+    aiTargets = [];
+    aiHitStack = [];
+
+    buildGrid(playerGridEl, false);
+    buildGrid(enemyGridEl, true);
+
+    placeControls.classList.remove('hide');
+    playControls.classList.add('hide');
+    rotateBtn.textContent = 'Rotate: Horizontal';
+
+    placeEnemyShips();
+    renderEnemyFleet();
+    updatePlaceStatus();
+    attachPlacementHandlers();
+  }
+
+  // ---- placement ----
+  function canPlace(board, r, c, len, horiz){
+    for (let i=0;i<len;i++){
+      const rr = horiz ? r : r+i;
+      const cc = horiz ? c+i : c;
+      if (rr<0||rr>=SIZE||cc<0||cc>=SIZE) return false;
+      if (board[rr][cc] !== null) return false;
+    }
+    return true;
+  }
+
+  function placeShip(board, ships, r, c, len, horiz, name){
+    const cells = [];
+    const idx = ships.length;
+    for (let i=0;i<len;i++){
+      const rr = horiz ? r : r+i;
+      const cc = horiz ? c+i : c;
+      board[rr][cc] = idx;
+      cells.push({r:rr, c:cc});
+    }
+    ships.push({name, len, cells, hits:0, sunk:false});
+  }
+
+  function placeEnemyShips(){
+    enemyBoard = emptyBoard();
+    enemyShips = [];
+    for (const s of SHIPS){
+      let placed = false, guard=0;
+      while(!placed && guard++<1000){
+        const horiz = Math.random()<0.5;
+        const r = Math.floor(Math.random()*SIZE);
+        const c = Math.floor(Math.random()*SIZE);
+        if (canPlace(enemyBoard, r, c, s.len, horiz)){
+          placeShip(enemyBoard, enemyShips, r, c, s.len, horiz, s.name);
+          placed = true;
+        }
+      }
+    }
+  }
+
+  function autoPlacePlayer(){
+    playerBoard = emptyBoard();
+    playerShips = [];
+    for (const s of SHIPS){
+      let placed=false, guard=0;
+      while(!placed && guard++<1000){
+        const horiz = Math.random()<0.5;
+        const r = Math.floor(Math.random()*SIZE);
+        const c = Math.floor(Math.random()*SIZE);
+        if (canPlace(playerBoard, r, c, s.len, horiz)){
+          placeShip(playerBoard, playerShips, r, c, s.len, horiz, s.name);
+          placed=true;
+        }
+      }
+    }
+    placeIndex = SHIPS.length;
+    renderPlayerBoard();
+    updatePlaceStatus();
+  }
+
+  function renderPlayerBoard(){
+    for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
+      const cell = cellAt(playerGridEl, r, c);
+      cell.classList.remove('ship');
+      if (playerBoard[r][c] !== null) cell.classList.add('ship');
+    }
+  }
+
+  function attachPlacementHandlers(){
+    for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
+      const cell = cellAt(playerGridEl, r, c);
+      cell.onmouseenter = ()=> previewPlacement(r,c);
+      cell.onmouseleave = clearPreview;
+      cell.onclick = ()=> tryPlaceAt(r,c);
+    }
+  }
+
+  function clearPreview(){
+    playerGridEl.querySelectorAll('.preview-ok,.preview-bad').forEach(el=>{
+      el.classList.remove('preview-ok','preview-bad');
+    });
+  }
+
+  function previewPlacement(r,c){
+    if (phase!=='place' || placeIndex>=SHIPS.length) return;
+    clearPreview();
+    const len = SHIPS[placeIndex].len;
+    const ok = canPlace(playerBoard, r, c, len, horizontal);
+    for (let i=0;i<len;i++){
+      const rr = horizontal ? r : r+i;
+      const cc = horizontal ? c+i : c;
+      if (rr<0||rr>=SIZE||cc<0||cc>=SIZE) continue;
+      const cell = cellAt(playerGridEl, rr, cc);
+      if (cell && !cell.classList.contains('ship'))
+        cell.classList.add(ok ? 'preview-ok' : 'preview-bad');
+    }
+  }
+
+  function tryPlaceAt(r,c){
+    if (phase!=='place' || placeIndex>=SHIPS.length) return;
+    const s = SHIPS[placeIndex];
+    if (!canPlace(playerBoard, r, c, s.len, horizontal)) return;
+    placeShip(playerBoard, playerShips, r, c, s.len, horizontal, s.name);
+    placeIndex++;
+    clearPreview();
+    renderPlayerBoard();
+    updatePlaceStatus();
+  }
+
+  function updatePlaceStatus(){
+    if (placeIndex < SHIPS.length){
+      const s = SHIPS[placeIndex];
+      statusEl.textContent = 'Place your ' + s.name + ' (length ' + s.len + ').';
+      autoBtn.disabled = false;
+    } else {
+      statusEl.textContent = 'Fleet ready! Fire at Enemy Waters to begin.';
+      startPlay();
+    }
+  }
+
+  function startPlay(){
+    phase = 'play';
+    placeControls.classList.add('hide');
+    playControls.classList.remove('hide');
+    statusEl.textContent = 'Your turn — fire at Enemy Waters!';
+    // make enemy cells fireable
+    for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
+      const cell = cellAt(enemyGridEl, r, c);
+      cell.classList.add('fireable');
+      cell.onclick = ()=> playerFire(r,c);
+    }
+  }
+
+  // ---- firing ----
+  function playerFire(r,c){
+    if (phase!=='play') return;
+    if (playerShots[r][c]) return;
+    playerShots[r][c] = true;
+    const cell = cellAt(enemyGridEl, r, c);
+    cell.classList.remove('fireable');
+    cell.onclick = null;
+    const shipIdx = enemyBoard[r][c];
+    if (shipIdx !== null){
+      cell.classList.add('hit');
+      cell.textContent = '✸';
+      const ship = enemyShips[shipIdx];
+      ship.hits++;
+      if (ship.hits >= ship.len){
+        ship.sunk = true;
+        markSunk(enemyGridEl, ship);
+        renderEnemyFleet();
+        statusEl.textContent = 'You sank the enemy ' + ship.name + '!';
+        if (enemyShips.every(s=>s.sunk)){ endGame(true); return; }
+      } else {
+        statusEl.textContent = 'Hit!';
+      }
+      // player gets to keep firing? Standard battleship: one shot per turn.
+      setTimeout(enemyTurn, 650);
+    } else {
+      cell.classList.add('miss');
+      cell.textContent = '•';
+      statusEl.textContent = 'Miss.';
+      setTimeout(enemyTurn, 650);
+    }
+  }
+
+  function markSunk(gridEl, ship){
+    for (const {r,c} of ship.cells){
+      const cell = cellAt(gridEl, r, c);
+      cell.classList.remove('hit');
+      cell.classList.add('sunk');
+      cell.textContent = '✖';
+    }
+  }
+
+  // ---- enemy AI: hunt/target ----
+  function enemyTurn(){
+    if (phase!=='play') return;
+    let target = null;
+    // target mode: use queue
+    while (aiTargets.length){
+      const t = aiTargets.shift();
+      if (t.r>=0 && t.r<SIZE && t.c>=0 && t.c<SIZE && !enemyShots[t.r][t.c]){
+        target = t; break;
+      }
+    }
+    if (!target){
+      // hunt: random parity search among un-fired cells
+      const candidates = [];
+      for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
+        if (!enemyShots[r][c] && (r+c)%2===0) candidates.push({r,c});
+      }
+      let pool = candidates;
+      if (pool.length===0){
+        pool = [];
+        for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+          if (!enemyShots[r][c]) pool.push({r,c});
+      }
+      if (pool.length===0) return;
+      target = pool[Math.floor(Math.random()*pool.length)];
+    }
+
+    const {r,c} = target;
+    enemyShots[r][c] = true;
+    const cell = cellAt(playerGridEl, r, c);
+    const shipIdx = playerBoard[r][c];
+    if (shipIdx !== null){
+      cell.classList.remove('ship');
+      cell.classList.add('hit');
+      cell.textContent = '✸';
+      const ship = playerShips[shipIdx];
+      ship.hits++;
+      aiHitStack.push({r,c});
+      if (ship.hits >= ship.len){
+        ship.sunk = true;
+        markSunk(playerGridEl, ship);
+        statusEl.textContent = 'Enemy sank your ' + ship.name + '!';
+        // clear targeting for that ship
+        aiHitStack = aiHitStack.filter(h => playerBoard[h.r][h.c] !== shipIdx);
+        if (aiHitStack.length===0) aiTargets = [];
+        if (playerShips.every(s=>s.sunk)){ endGame(false); return; }
+      } else {
+        statusEl.textContent = 'Enemy hit your ' + ship.name + '!';
+        queueAiNeighbors();
+      }
+    } else {
+      cell.classList.add('miss');
+      cell.textContent = '•';
+      statusEl.textContent = 'Enemy missed. Your turn!';
+    }
+  }
+
+  function queueAiNeighbors(){
+    // If two+ hits inline, prioritize continuing along the line.
+    if (aiHitStack.length >= 2){
+      const a = aiHitStack[aiHitStack.length-2];
+      const b = aiHitStack[aiHitStack.length-1];
+      if (a.r === b.r){
+        // horizontal line
+        const cs = aiHitStack.filter(h=>h.r===a.r).map(h=>h.c);
+        const minc = Math.min(...cs), maxc = Math.max(...cs);
+        aiTargets.unshift({r:a.r, c:maxc+1});
+        aiTargets.unshift({r:a.r, c:minc-1});
+        return;
+      } else if (a.c === b.c){
+        const rs = aiHitStack.filter(h=>h.c===a.c).map(h=>h.r);
+        const minr = Math.min(...rs), maxr = Math.max(...rs);
+        aiTargets.unshift({r:maxr+1, c:a.c});
+        aiTargets.unshift({r:minr-1, c:a.c});
+        return;
+      }
+    }
+    const last = aiHitStack[aiHitStack.length-1];
+    const nb = [
+      {r:last.r-1,c:last.c},{r:last.r+1,c:last.c},
+      {r:last.r,c:last.c-1},{r:last.r,c:last.c+1},
+    ];
+    for (const n of nb){
+      if (n.r>=0&&n.r<SIZE&&n.c>=0&&n.c<SIZE&&!enemyShots[n.r][n.c])
+        aiTargets.push(n);
+    }
+  }
+
+  function renderEnemyFleet(){
+    enemyFleetEl.innerHTML = '<span style="color:#94a3b8;font-size:12px;align-self:center;">Enemy:</span>';
+    const list = enemyShips.length ? enemyShips : SHIPS.map(s=>({name:s.name,len:s.len,sunk:false}));
+    for (const s of list){
+      const d = document.createElement('span');
+      d.className = 'ship-ind' + (s.sunk?' dead':'');
+      d.textContent = s.name + ' (' + s.len + ')';
+      enemyFleetEl.appendChild(d);
+    }
+  }
+
+  function endGame(won){
+    phase = 'over';
+    ovTitle.textContent = won ? '🏆 Victory!' : '💥 Defeated';
+    ovText.textContent = won
+      ? 'You sank the entire enemy fleet. Well fought, Admiral!'
+      : 'Your fleet has been destroyed. Better luck next time.';
+    ovBtn.textContent = 'Play Again';
+    overlay.classList.remove('hide');
+    overlay.style.display = 'flex';
+  }
+
+  // ---- controls ----
+  rotateBtn.onclick = ()=>{
+    horizontal = !horizontal;
+    rotateBtn.textContent = 'Rotate: ' + (horizontal?'Horizontal':'Vertical');
+  };
+  autoBtn.onclick = ()=>{ autoPlacePlayer(); };
+  resetPlaceBtn.onclick = ()=>{
+    playerBoard = emptyBoard();
+    playerShips = [];
+    placeIndex = 0;
+    renderPlayerBoard();
+    updatePlaceStatus();
+  };
+  newGameBtn.onclick = ()=>{ init(); };
+  ovBtn.onclick = ()=>{
+    overlay.style.display = 'none';
+    init();
+  };
+
+  // build initial grids behind overlay
+  buildGrid(playerGridEl, false);
+  buildGrid(enemyGridEl, true);
+  renderEnemyFleet();
+})();
+</script>
+</body>
+</html>

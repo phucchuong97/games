@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reversi</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { color: #4ade80; margin: 10px 0 4px; font-size: 28px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 14px; }
+  .panel {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .scorebar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+  .score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: #0f3460;
+    transition: box-shadow .2s;
+  }
+  .score.active { box-shadow: 0 0 0 2px #fbbf24; }
+  .disc-mini {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: inline-block;
+  }
+  .disc-mini.black { background: #1f2937; border: 1px solid #444; }
+  .disc-mini.white { background: #f5f5f5; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 52px);
+    grid-template-rows: repeat(8, 52px);
+    background: #0f3460;
+    padding: 6px;
+    border-radius: 8px;
+    gap: 2px;
+  }
+  .cell {
+    background: #14532d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    border-radius: 3px;
+  }
+  .cell:hover { background: #166534; }
+  .disc {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    transform: scale(0);
+    transition: transform .18s ease-out, background .3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,.4);
+  }
+  .disc.show { transform: scale(1); }
+  .disc.black { background: #1f2937; }
+  .disc.white { background: #f5f5f5; }
+  .hint {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #4ade80;
+    opacity: .55;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:.35;} 50%{opacity:.7;} }
+  .controls { display: flex; gap: 12px; align-items: center; }
+  button {
+    background: #4ade80;
+    color: #16213e;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: #22c55e; }
+  #status { color: #60a5fa; font-size: 14px; min-height: 18px; font-weight: bold; }
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,10,20,.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    z-index: 50;
+    text-align: center;
+    padding: 20px;
+  }
+  .overlay h2 { color: #4ade80; font-size: 34px; }
+  .overlay p { color: #94a3b8; max-width: 380px; line-height: 1.5; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
+
+<h1>Reversi</h1>
+<div class="sub">You are Black · AI is White</div>
+
+<div class="panel">
+  <div class="scorebar">
+    <div class="score" id="scoreBlack"><span class="disc-mini black"></span><span id="cntBlack">2</span></div>
+    <div id="status">Your turn</div>
+    <div class="score" id="scoreWhite"><span class="disc-mini white"></span><span id="cntWhite">2</span></div>
+  </div>
+  <div id="board"></div>
+  <div class="controls">
+    <button id="newGame">New Game</button>
+  </div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <h2>Reversi</h2>
+  <p>Place a disc so it flanks one or more of the AI's discs in a straight line — all trapped discs flip to your color. Corners are gold. Green dots show your legal moves.</p>
+  <button id="startBtn">Start Game</button>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <h2 id="endTitle">Game Over</h2>
+  <p id="endText"></p>
+  <button id="endBtn">Play Again</button>
+</div>
+
+<script>
+(function(){
+  const BLACK = 1, WHITE = 2;
+  const HUMAN = BLACK, AI = WHITE;
+  const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  // Positional weights for AI evaluation
+  const WEIGHTS = [
+    [120,-20, 20,  5,  5, 20,-20,120],
+    [-20,-40, -5, -5, -5, -5,-40,-20],
+    [ 20, -5, 15,  3,  3, 15, -5, 20],
+    [  5, -5,  3,  3,  3,  3, -5,  5],
+    [  5, -5,  3,  3,  3,  3, -5,  5],
+    [ 20, -5, 15,  3,  3, 15, -5, 20],
+    [-20,-40, -5, -5, -5, -5,-40,-20],
+    [120,-20, 20,  5,  5, 20,-20,120]
+  ];
+
+  let board, current, busy = false, gameOver = false;
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const cntBlackEl = document.getElementById('cntBlack');
+  const cntWhiteEl = document.getElementById('cntWhite');
+  const scoreBlackEl = document.getElementById('scoreBlack');
+  const scoreWhiteEl = document.getElementById('scoreWhite');
+
+  function newBoard(){
+    const b = Array.from({length:8}, ()=>new Array(8).fill(0));
+    b[3][3] = WHITE; b[3][4] = BLACK;
+    b[4][3] = BLACK; b[4][4] = WHITE;
+    return b;
+  }
+
+  function opponent(p){ return p === BLACK ? WHITE : BLACK; }
+
+  // Return list of flipped discs if playing (r,c) for player, else []
+  function flipsFor(b, r, c, player){
+    if (b[r][c] !== 0) return [];
+    const opp = opponent(player);
+    const all = [];
+    for (const [dr,dc] of DIRS){
+      const line = [];
+      let nr = r+dr, nc = c+dc;
+      while (nr>=0 && nr<8 && nc>=0 && nc<8 && b[nr][nc] === opp){
+        line.push([nr,nc]);
+        nr += dr; nc += dc;
+      }
+      if (line.length && nr>=0 && nr<8 && nc>=0 && nc<8 && b[nr][nc] === player){
+        all.push(...line);
+      }
+    }
+    return all;
+  }
+
+  function legalMoves(b, player){
+    const moves = [];
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      if (b[r][c] !== 0) continue;
+      const f = flipsFor(b, r, c, player);
+      if (f.length) moves.push({r,c,flips:f});
+    }
+    return moves;
+  }
+
+  function applyMove(b, r, c, player, flips){
+    b[r][c] = player;
+    for (const [fr,fc] of flips) b[fr][fc] = player;
+  }
+
+  function counts(b){
+    let black=0, white=0;
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      if (b[r][c]===BLACK) black++;
+      else if (b[r][c]===WHITE) white++;
+    }
+    return {black, white};
+  }
+
+  // ---------- Rendering ----------
+  function render(hints){
+    boardEl.innerHTML = '';
+    const moveMap = {};
+    if (hints){
+      for (const m of hints) moveMap[m.r+'-'+m.c] = m;
+    }
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+      const v = board[r][c];
+      if (v !== 0){
+        const d = document.createElement('div');
+        d.className = 'disc ' + (v===BLACK ? 'black' : 'white') + ' show';
+        cell.appendChild(d);
+      } else if (moveMap[r+'-'+c]){
+        const h = document.createElement('div');
+        h.className = 'hint';
+        cell.appendChild(h);
+      }
+      cell.addEventListener('click', ()=>onCellClick(r,c));
+      boardEl.appendChild(cell);
+    }
+    updateScore();
+  }
+
+  function cellAt(r,c){
+    return boardEl.children[r*8 + c];
+  }
+
+  function updateScore(){
+    const {black, white} = counts(board);
+    cntBlackEl.textContent = black;
+    cntWhiteEl.textContent = white;
+    scoreBlackEl.classList.toggle('active', current===BLACK && !gameOver);
+    scoreWhiteEl.classList.toggle('active', current===WHITE && !gameOver);
+  }
+
+  // Animate a placement + flips on the live board
+  function animateMove(r, c, player, flips, done){
+    // place disc
+    const cell = cellAt(r,c);
+    cell.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'disc ' + (player===BLACK?'black':'white');
+    cell.appendChild(d);
+    requestAnimationFrame(()=> d.classList.add('show'));
+    board[r][c] = player;
+    updateScore();
+    // flip each
+    let i = 0;
+    const flipNext = ()=>{
+      if (i >= flips.length){ updateScore(); done(); return; }
+      const [fr,fc] = flips[i++];
+      board[fr][fc] = player;
+      const fcell = cellAt(fr,fc);
+      const fd = fcell.querySelector('.disc');
+      if (fd){
+        fd.classList.remove('black','white');
+        fd.classList.add(player===BLACK?'black':'white');
+      }
+      updateScore();
+      setTimeout(flipNext, 55);
+    };
+    setTimeout(flipNext, 120);
+  }
+
+  // ---------- Turn flow ----------
+  function onCellClick(r,c){
+    if (busy || gameOver || current !== HUMAN) return;
+    const flips = flipsFor(board, r, c, HUMAN);
+    if (!flips.length) return;
+    busy = true;
+    statusEl.textContent = '';
+    animateMove(r, c, HUMAN, flips, ()=>{
+      current = AI;
+      busy = false;
+      nextTurn();
+    });
+  }
+
+  function nextTurn(){
+    if (gameOver) return;
+    const myMoves = legalMoves(board, current);
+    if (myMoves.length === 0){
+      const oppMoves = legalMoves(board, opponent(current));
+      if (oppMoves.length === 0){
+        endGame();
+        return;
+      }
+      // pass
+      const who = current===HUMAN ? 'You have' : 'AI has';
+      statusEl.textContent = who + ' no move — pass';
+      current = opponent(current);
+      setTimeout(()=>{ statusEl.textContent = ''; nextTurn(); }, 900);
+      return;
+    }
+    if (current === HUMAN){
+      statusEl.textContent = 'Your turn';
+      render(myMoves);
+    } else {
+      statusEl.textContent = 'AI thinking…';
+      render(null);
+      setTimeout(aiMove, 350);
+    }
+  }
+
+  function aiMove(){
+    const move = bestMove(board, AI, 4);
+    if (!move){ current = HUMAN; nextTurn(); return; }
+    busy = true;
+    const flips = flipsFor(board, move.r, move.c, AI);
+    animateMove(move.r, move.c, AI, flips, ()=>{
+      current = HUMAN;
+      busy = false;
+      nextTurn();
+    });
+  }
+
+  function endGame(){
+    gameOver = true;
+    updateScore();
+    const {black, white} = counts(board);
+    let title, text;
+    if (black > white){ title = 'You Win!'; text = `Black ${black} — White ${white}. Well played.`; }
+    else if (white > black){ title = 'AI Wins'; text = `White ${white} — Black ${black}. Try again!`; }
+    else { title = 'Draw'; text = `Tied ${black} — ${white}.`; }
+    document.getElementById('endTitle').textContent = title;
+    document.getElementById('endText').textContent = text;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    statusEl.textContent = 'Game over';
+  }
+
+  // ---------- AI: minimax + alpha-beta ----------
+  function evaluate(b){
+    // From AI (WHITE) perspective
+    let score = 0;
+    const {black, white} = counts(b);
+    const empties = 64 - black - white;
+    // positional
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      if (b[r][c]===AI) score += WEIGHTS[r][c];
+      else if (b[r][c]===HUMAN) score -= WEIGHTS[r][c];
+    }
+    // mobility
+    const aiMob = legalMoves(b, AI).length;
+    const huMob = legalMoves(b, HUMAN).length;
+    if (aiMob + huMob !== 0){
+      score += 15 * (aiMob - huMob);
+    }
+    // disc difference matters near endgame
+    if (empties < 12){
+      score += 5 * (white - black);
+    }
+    return score;
+  }
+
+  function minimax(b, depth, alpha, beta, player){
+    const moves = legalMoves(b, player);
+    if (depth === 0){
+      return evaluate(b);
+    }
+    if (moves.length === 0){
+      // pass or terminal
+      const oppMoves = legalMoves(b, opponent(player));
+      if (oppMoves.length === 0){
+        // terminal — score strongly by disc count
+        const {black, white} = counts(b);
+        return (white - black) * 1000;
+      }
+      return minimax(b, depth-1, alpha, beta, opponent(player));
+    }
+    if (player === AI){
+      let best = -Infinity;
+      for (const m of moves){
+        const nb = b.map(row=>row.slice());
+        applyMove(nb, m.r, m.c, player, m.flips);
+        const val = minimax(nb, depth-1, alpha, beta, HUMAN);
+        if (val > best) best = val;
+        if (best > alpha) alpha = best;
+        if (alpha >= beta) break;
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for (const m of moves){
+        const nb = b.map(row=>row.slice());
+        applyMove(nb, m.r, m.c, player, m.flips);
+        const val = minimax(nb, depth-1, alpha, beta, AI);
+        if (val < best) best = val;
+        if (best < beta) beta = best;
+        if (alpha >= beta) break;
+      }
+      return best;
+    }
+  }
+
+  function bestMove(b, player, depth){
+    const moves = legalMoves(b, player);
+    if (moves.length === 0) return null;
+    let best = null, bestVal = -Infinity;
+    let alpha = -Infinity, beta = Infinity;
+    for (const m of moves){
+      const nb = b.map(row=>row.slice());
+      applyMove(nb, m.r, m.c, player, m.flips);
+      const val = minimax(nb, depth-1, alpha, beta, HUMAN);
+      if (val > bestVal){ bestVal = val; best = m; }
+      if (bestVal > alpha) alpha = bestVal;
+    }
+    return best;
+  }
+
+  // ---------- Setup ----------
+  function start(){
+    board = newBoard();
+    current = HUMAN;
+    busy = false;
+    gameOver = false;
+    document.getElementById('startOverlay').classList.add('hidden');
+    document.getElementById('endOverlay').classList.add('hidden');
+    nextTurn();
+  }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('newGame').addEventListener('click', start);
+  document.getElementById('endBtn').addEventListener('click', start);
+
+  // initial idle render behind overlay
+  board = newBoard();
+  current = HUMAN;
+  gameOver = false;
+  render(null);
+})();
+</script>
+</body>
+</html>
