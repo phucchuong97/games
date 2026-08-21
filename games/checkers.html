@@ -137,18 +137,21 @@
   <div id="board"></div>
   <div class="controls">
     <button id="newGame">New Game</button>
+    <label style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" id="aiFirst" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   </div>
 </div>
 
 <div class="overlay" id="startOverlay">
   <h2>Checkers</h2>
   <p>English draughts. Move diagonally forward; capturing is mandatory and multi-jumps must be completed. Reach the far row to crown a King, which moves both ways. Click a piece to see its moves.</p>
+  <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   <button id="startBtn">Start Game</button>
 </div>
 
 <div class="overlay hidden" id="endOverlay">
   <h2 id="endTitle">Game Over</h2>
   <p id="endText"></p>
+  <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   <button id="endBtn">Play Again</button>
 </div>
 
@@ -610,17 +613,34 @@
 
   function start(){
     board=newBoard();
-    current=HUMAN;
     selected=null; legal=[]; busy=false; gameOver=false; mustContinueFrom=null; aiLast=null;
     document.getElementById('startOverlay').classList.add('hidden');
     document.getElementById('endOverlay').classList.add('hidden');
+    // "AI goes first" applies at the moment a new game begins; colors are unchanged.
+    const aiFirst = !!(document.getElementById('aiFirst') && document.getElementById('aiFirst').checked);
+    current = aiFirst ? AI : HUMAN;
     buildBoard();
-    statusEl.textContent = hasCapture(HUMAN) ? 'Your turn — capture available' : 'Your turn';
+    if (aiFirst){
+      // AI makes the opening move (incl. any multi-jump); endTurn(AI) then hands control to the human.
+      statusEl.textContent='AI thinking…';
+      busy=true;
+      setTimeout(aiTurn, 380);
+    } else {
+      statusEl.textContent = hasCapture(HUMAN) ? 'Your turn — capture available' : 'Your turn';
+    }
   }
 
   document.getElementById('startBtn').addEventListener('click', start);
   document.getElementById('newGame').addEventListener('click', start);
   document.getElementById('endBtn').addEventListener('click', start);
+
+  // Keep all "AI goes first" checkboxes (controls + overlays) in sync
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('ai-first-toggle')) {
+      const v = e.target.checked;
+      document.querySelectorAll('.ai-first-toggle').forEach(cb => { cb.checked = v; });
+    }
+  });
 
   // idle render behind overlay
   board=newBoard(); current=HUMAN; gameOver=false;

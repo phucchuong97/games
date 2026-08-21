@@ -119,6 +119,7 @@
       </select>
     </label>
     <button id="newGameBtn">New Game</button>
+    <label style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" id="aiFirst" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   </div>
 </div>
 
@@ -130,6 +131,7 @@
   <div class="card">
     <h2>▦ Dots and Boxes</h2>
     <p>Take turns drawing edges between dots. Complete the 4th side of a box to claim it and earn another turn. Most boxes wins!</p>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;margin-bottom:14px;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
     <button id="ovBtn">Start Game</button>
   </div>
 </div>
@@ -160,6 +162,7 @@
   const scoreAiEl = document.getElementById('scoreAi');
   const sizeSel = document.getElementById('sizeSel');
   const newGameBtn = document.getElementById('newGameBtn');
+  const aiFirstEl = document.getElementById('aiFirst');
   const overlay = document.getElementById('overlay');
   const ovBtn = document.getElementById('ovBtn');
 
@@ -178,8 +181,20 @@
     busy = false;
     aiLastEdges = [];
     render();
-    updateScores();
-    statusEl.textContent = 'Your turn — draw an edge.';
+    if (aiFirstEl && aiFirstEl.checked){
+      // AI takes the first move of the new game. It keeps drawing while it
+      // completes boxes (extra-turn rule), then aiTurn hands control back.
+      turn = 'ai';
+      busy = true;
+      updateScores();
+      statusEl.textContent = 'AI is thinking…';
+      setTimeout(aiTurn, 500);
+    } else {
+      turn = 'you';
+      busy = false;
+      updateScores();
+      statusEl.textContent = 'Your turn — draw an edge.';
+    }
   }
 
   function render(){
@@ -481,6 +496,14 @@
   newGameBtn.onclick = ()=> init();
   sizeSel.onchange = ()=> init();
   ovBtn.onclick = ()=>{ overlay.style.display='none'; init(); };
+
+  // Keep every "AI goes first" checkbox (controls bar + start overlay) in sync.
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('ai-first-toggle')) {
+      const v = e.target.checked;
+      document.querySelectorAll('.ai-first-toggle').forEach(cb => { cb.checked = v; });
+    }
+  });
 
   // initial render behind overlay
   init();

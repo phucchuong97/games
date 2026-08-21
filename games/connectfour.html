@@ -118,7 +118,7 @@ button.btn:hover { background: #22c55e; }
 .cell.animate { animation: dropIn 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
 
 /* Buttons row */
-#controls { display: flex; gap: 12px; margin-top: 16px; }
+#controls { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
 button.btn-sm {
   background: #4ade80; color: #16213e; font-weight: bold;
   border: none; border-radius: 6px; padding: 8px 20px;
@@ -135,6 +135,7 @@ button.btn-sm:hover { background: #22c55e; }
   <div class="panel">
     <h2>CONNECT FOUR</h2>
     <p>Drop discs to connect 4 in a row.<br>You are <span style="color:#fbbf24">Yellow</span>, AI is <span style="color:#f87171">Red</span>.</p>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;margin-bottom:16px;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
     <button class="btn" onclick="startGame()">Start Game</button>
   </div>
 </div>
@@ -168,6 +169,7 @@ button.btn-sm:hover { background: #22c55e; }
 
 <div id="controls">
   <button class="btn-sm" onclick="newGame()">New Game</button>
+  <label style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" id="aiFirst" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
 </div>
 
 <script>
@@ -175,6 +177,14 @@ const ROWS = 6, COLS = 7;
 let grid, gameOver, aiThinking;
 let scores = { you: 0, ai: 0 };
 let hoverCol = -1;
+
+// Keep every "AI goes first" checkbox (controls bar + overlays) in sync.
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('ai-first-toggle')) {
+    const v = e.target.checked;
+    document.querySelectorAll('.ai-first-toggle').forEach(cb => { cb.checked = v; });
+  }
+});
 
 function startGame() {
   document.getElementById('overlay').style.display = 'none';
@@ -188,8 +198,16 @@ function newGame() {
   hoverCol = -1;
   renderBoard();
   clearAiHighlight();
-  updateTurnIndicator('your');
   clearHover();
+  const aiFirst = document.getElementById('aiFirst');
+  if (aiFirst && aiFirst.checked) {
+    // AI takes the opening move; human keeps their color and plays after.
+    aiThinking = true;
+    updateTurnIndicator('ai');
+    setTimeout(aiTurn, 400);
+  } else {
+    updateTurnIndicator('your');
+  }
 }
 
 function renderBoard() {
@@ -348,6 +366,7 @@ function showEndOverlay(msg, _) {
   ov.innerHTML = `<div class="panel">
     <h2>${msg}</h2>
     <p style="margin-bottom:24px;color:#94a3b8">Score — You: ${scores.you} | AI: ${scores.ai}</p>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;margin-bottom:16px;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;" ${document.getElementById('aiFirst').checked ? 'checked' : ''}> AI goes first</label>
     <button class="btn" onclick="startNewRound()">Play Again</button>
   </div>`;
 }

@@ -148,18 +148,21 @@
   <div id="board"></div>
   <div class="controls">
     <button id="newGame">New Game</button>
+    <label style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" id="aiFirst" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   </div>
 </div>
 
 <div class="overlay" id="startOverlay">
   <h2>Reversi</h2>
   <p>Place a disc so it flanks one or more of the AI's discs in a straight line — all trapped discs flip to your color. Corners are gold. Green dots show your legal moves.</p>
+  <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   <button id="startBtn">Start Game</button>
 </div>
 
 <div class="overlay hidden" id="endOverlay">
   <h2 id="endTitle">Game Over</h2>
   <p id="endText"></p>
+  <label style="display:flex;align-items:center;gap:8px;justify-content:center;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" class="ai-first-toggle" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
   <button id="endBtn">Play Again</button>
 </div>
 
@@ -474,19 +477,32 @@
   // ---------- Setup ----------
   function start(){
     board = newBoard();
-    current = HUMAN;
     busy = false;
     gameOver = false;
     aiLastMove = null;
     aiFlipped = [];
     document.getElementById('startOverlay').classList.add('hidden');
     document.getElementById('endOverlay').classList.add('hidden');
+    // "AI goes first": keep colors fixed (human stays Black, AI stays White);
+    // only who takes the first turn changes. When checked, hand the opening
+    // turn to the AI — nextTurn() -> aiMove() plays it with the gold highlight
+    // and then passes control back to the human.
+    const aiFirst = document.getElementById('aiFirst').checked;
+    current = aiFirst ? AI : HUMAN;
     nextTurn();
   }
 
   document.getElementById('startBtn').addEventListener('click', start);
   document.getElementById('newGame').addEventListener('click', start);
   document.getElementById('endBtn').addEventListener('click', start);
+
+  // Keep every "AI goes first" checkbox (controls bar + both overlays) in sync
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('ai-first-toggle')) {
+      const v = e.target.checked;
+      document.querySelectorAll('.ai-first-toggle').forEach(cb => { cb.checked = v; });
+    }
+  });
 
   // initial idle render behind overlay
   board = newBoard();

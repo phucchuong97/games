@@ -102,6 +102,7 @@
         <option value="hard" selected>Hard (unbeatable)</option>
       </select>
     </label>
+    <label id="aiFirst-label" style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:14px;cursor:pointer;user-select:none;"><input type="checkbox" id="aiFirst" style="accent-color:#4ade80;width:16px;height:16px;cursor:pointer;"> AI goes first</label>
     <button class="primary" id="restart">New Game</button>
   </div>
   <div id="stage">
@@ -121,6 +122,8 @@
   const restartBtn = document.getElementById("restart");
   const messageEl = document.getElementById("message");
   const startBtn = document.getElementById("start");
+  const aiFirstEl = document.getElementById("aiFirst");
+  const aiFirstLabel = document.getElementById("aiFirst-label");
 
   const HUMAN = "X", AI = "O";
   const LINES = [
@@ -161,6 +164,7 @@
     gameOver = false;
     started = false;
     diffLabel.style.display = modeEl.value === "ai" ? "" : "none";
+    aiFirstLabel.style.display = modeEl.value === "ai" ? "flex" : "none";
     lastAiIndex = -1;
     cells.forEach(c => { c.textContent = ""; c.className = "cell"; });
     messageEl.classList.add("show");
@@ -285,6 +289,12 @@
   startBtn.addEventListener("click", () => {
     started = true;
     messageEl.classList.remove("show");
+    // If enabled, the computer takes the opening move of the new game.
+    if (modeEl.value === "ai" && aiFirstEl.checked && !gameOver) {
+      current = AI;
+      updateStatus();
+      setTimeout(aiMove, 250);
+    }
   });
   restartBtn.addEventListener("click", init);
   modeEl.addEventListener("change", init);
