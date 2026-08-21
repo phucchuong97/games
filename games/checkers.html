@@ -81,6 +81,26 @@
   .piece.red { background: radial-gradient(circle at 35% 30%, #fca5a5, #f87171 60%, #dc2626); }
   .piece.dark { background: radial-gradient(circle at 35% 30%, #4b5563, #1f2937 60%, #0f172a); }
   .piece.selectable { cursor: pointer; }
+  /* Highlight of the AI's most recent move */
+  .piece.ai-last {
+    z-index: 3;
+    animation: aiPiecePulse 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes aiPiecePulse {
+    from { box-shadow: 0 0 0 3px #fbbf24, 0 0 6px 1px rgba(251,191,36,0.4), 0 3px 5px rgba(0,0,0,.5); }
+    to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 14px 4px rgba(251,191,36,0.7), 0 3px 5px rgba(0,0,0,.5); }
+  }
+  .cell.ai-origin::before {
+    content:''; position:absolute; inset:8px;
+    border: 2px dashed rgba(251,191,36,0.55); border-radius:5px; pointer-events:none;
+    animation: aiCellPulse 1.2s ease-in-out infinite alternate;
+  }
+  .cell.ai-cap::before {
+    content:''; position:absolute; inset:12px;
+    background: rgba(251,191,36,0.28); border-radius:50%; pointer-events:none;
+    animation: aiCellPulse 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes aiCellPulse { from { opacity:.4; } to { opacity:.85; } }
   .crown { font-size: 22px; line-height: 1; }
   .controls { display: flex; gap: 12px; align-items: center; }
   button {
@@ -145,6 +165,7 @@
 
   let board, current, selected=null, legal=[], busy=false, gameOver=false;
   let mustContinueFrom = null; // for multi-jump chains (human)
+  let aiLast = null; // most recent AI move highlight: {dest:{r,c}, origin:{r,c}, caps:[[r,c],...]}
 
   const boardEl = document.getElementById('board');
   const statusEl = document.getElementById('status');
@@ -260,7 +281,7 @@
   function render(){
     // clear decorations & pieces
     for (const cell of boardEl.children){
-      cell.classList.remove('selected');
+      cell.classList.remove('selected','ai-origin','ai-cap');
       const dot = cell.querySelector('.move-dot');
       if (dot) dot.remove();
       const pc = cell.querySelector('.piece');
@@ -292,6 +313,14 @@
         dot.className='move-dot';
         cell.appendChild(dot);
       }
+    }
+    // Highlight the AI's most recent move (destination primary; origin/captures subtle)
+    if (aiLast){
+      const destCell=cellAt(aiLast.dest.r, aiLast.dest.c);
+      const destPc=destCell && destCell.querySelector('.piece');
+      if (destPc) destPc.classList.add('ai-last');
+      if (aiLast.origin) cellAt(aiLast.origin.r, aiLast.origin.c).classList.add('ai-origin');
+      for (const cap of aiLast.caps) cellAt(cap[0], cap[1]).classList.add('ai-cap');
     }
     updateScore();
   }
@@ -339,6 +368,7 @@
 
   function doHumanMove(m){
     busy=true;
+    aiLast=null; // human is moving — clear the AI's last-move highlight
     selected=null; legal=[];
     const wasKing = isKing(board[m.fr][m.fc]);
     animateMove(m, ()=>{
@@ -439,6 +469,13 @@
   // Execute a chain of steps with animation
   function playSequence(seq, i){
     if (i>=seq.length){
+      // Record the AI's completed move for highlighting: final destination is primary
+      const lastStep = seq[seq.length-1];
+      aiLast = {
+        dest: { r:lastStep.tr, c:lastStep.tc },
+        origin: { r:seq[0].fr, c:seq[0].fc },
+        caps: seq.filter(m=>m.cap).map(m=>m.cap)
+      };
       render();
       endTurn(AI);
       return;
@@ -574,7 +611,7 @@
   function start(){
     board=newBoard();
     current=HUMAN;
-    selected=null; legal=[]; busy=false; gameOver=false; mustContinueFrom=null;
+    selected=null; legal=[]; busy=false; gameOver=false; mustContinueFrom=null; aiLast=null;
     document.getElementById('startOverlay').classList.add('hidden');
     document.getElementById('endOverlay').classList.add('hidden');
     buildBoard();

@@ -59,6 +59,17 @@
   }
   .cell:hover { background: #1c2c50; }
   .cell.win { background: #14532d; }
+  /* Highlight the computer's most recent move */
+  .cell.last-ai {
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6);
+    animation: pulse-gold 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes pulse-gold {
+    from { box-shadow: 0 0 0 3px #fbbf24, 0 0 8px 1px rgba(251,191,36,0.4); }
+    to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 16px 4px rgba(251,191,36,0.75); }
+  }
   #message {
     position: absolute;
     inset: 0;
@@ -119,7 +130,21 @@
   ];
 
   let board, current, gameOver, started;
+  let lastAiIndex = -1; // index of the computer's most recent move, or -1
   const cells = [];
+
+  function clearAiHighlight() {
+    if (lastAiIndex !== -1) {
+      cells[lastAiIndex].classList.remove("last-ai");
+      lastAiIndex = -1;
+    }
+  }
+
+  function highlightAiMove(i) {
+    clearAiHighlight();
+    cells[i].classList.add("last-ai");
+    lastAiIndex = i;
+  }
 
   for (let i = 0; i < 9; i++) {
     const c = document.createElement("div");
@@ -136,6 +161,7 @@
     gameOver = false;
     started = false;
     diffLabel.style.display = modeEl.value === "ai" ? "" : "none";
+    lastAiIndex = -1;
     cells.forEach(c => { c.textContent = ""; c.className = "cell"; });
     messageEl.classList.add("show");
     updateStatus();
@@ -156,6 +182,7 @@
   function onClick(i) {
     if (!started || gameOver || board[i]) return;
     if (modeEl.value === "ai" && current !== HUMAN) return;
+    clearAiHighlight(); // human is moving — drop the computer's last-move marker
     place(i, current);
     if (gameOver) return;
     if (modeEl.value === "ai") {
@@ -196,6 +223,7 @@
     if (gameOver) return;
     const i = difficultyEl.value === "hard" ? bestMove() : randomMove();
     place(i, AI);
+    highlightAiMove(i); // mark the computer's most recent move
     if (!gameOver) {
       current = HUMAN;
       updateStatus();

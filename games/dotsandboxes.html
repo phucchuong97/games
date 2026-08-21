@@ -85,6 +85,17 @@
   .edge.drawn-you { stroke: #60a5fa; cursor: default; }
   .edge.drawn-ai { stroke: #f87171; cursor: default; }
   .edge.hint { stroke: #2b3a55; }
+  /* Highlight of the AI's most recent turn's edges */
+  .edge.ai-last { stroke: #fbbf24; animation: aiEdgePulse 1.2s ease-in-out infinite alternate; }
+  @keyframes aiEdgePulse { from { opacity: 0.72; } to { opacity: 1; } }
+  .edge-glow {
+    stroke: rgba(251,191,36,0.5); stroke-linecap: round; pointer-events: none;
+    animation: aiGlowPulse 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes aiGlowPulse {
+    from { opacity: 0.35; stroke-width: 12; }
+    to   { opacity: 0.75; stroke-width: 17; }
+  }
   .dot { fill: #94a3b8; }
 </style>
 </head>
@@ -141,6 +152,7 @@
   let totalBoxes;
   let claimed;
   let busy = false;
+  let aiLastEdges = []; // edges the AI drew during its most recent turn: [{type,r,c},...]
 
   const board = document.getElementById('board');
   const statusEl = document.getElementById('status');
@@ -164,6 +176,7 @@
     scoreYou = 0; scoreAi = 0;
     totalBoxes = N*N; claimed = 0;
     busy = false;
+    aiLastEdges = [];
     render();
     updateScores();
     statusEl.textContent = 'Your turn — draw an edge.';
@@ -202,12 +215,15 @@
     // horizontal edges
     for (let r=0;r<=N;r++) for (let c=0;c<N;c++){
       const owner = hEdges[hKey(r,c)];
+      const x1 = PAD + c*GAP, y1 = PAD + r*GAP, x2 = PAD + (c+1)*GAP, y2 = PAD + r*GAP;
+      const aiLast = isAiLast('h',r,c);
+      if (aiLast) addGlow(x1,y1,x2,y2);
       const line = document.createElementNS(SVG_NS,'line');
-      line.setAttribute('x1', PAD + c*GAP);
-      line.setAttribute('y1', PAD + r*GAP);
-      line.setAttribute('x2', PAD + (c+1)*GAP);
-      line.setAttribute('y2', PAD + r*GAP);
-      line.setAttribute('class', edgeClass(owner));
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.setAttribute('class', edgeClass(owner) + (aiLast ? ' ai-last' : ''));
       if (!owner){
         line.addEventListener('click', ()=> humanMove('h',r,c));
       }
@@ -216,12 +232,15 @@
     // vertical edges
     for (let r=0;r<N;r++) for (let c=0;c<=N;c++){
       const owner = vEdges[vKey(r,c)];
+      const x1 = PAD + c*GAP, y1 = PAD + r*GAP, x2 = PAD + c*GAP, y2 = PAD + (r+1)*GAP;
+      const aiLast = isAiLast('v',r,c);
+      if (aiLast) addGlow(x1,y1,x2,y2);
       const line = document.createElementNS(SVG_NS,'line');
-      line.setAttribute('x1', PAD + c*GAP);
-      line.setAttribute('y1', PAD + r*GAP);
-      line.setAttribute('x2', PAD + c*GAP);
-      line.setAttribute('y2', PAD + (r+1)*GAP);
-      line.setAttribute('class', edgeClass(owner));
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.setAttribute('class', edgeClass(owner) + (aiLast ? ' ai-last' : ''));
       if (!owner){
         line.addEventListener('click', ()=> humanMove('v',r,c));
       }
@@ -243,6 +262,19 @@
     if (owner==='you') return 'edge drawn-you';
     if (owner==='ai') return 'edge drawn-ai';
     return 'edge open';
+  }
+
+  function isAiLast(type,r,c){
+    return aiLastEdges.some(e => e.type===type && e.r===r && e.c===c);
+  }
+
+  // Soft translucent gold underlay drawn beneath an AI last-move edge for the glow.
+  function addGlow(x1,y1,x2,y2){
+    const g = document.createElementNS(SVG_NS,'line');
+    g.setAttribute('x1',x1); g.setAttribute('y1',y1);
+    g.setAttribute('x2',x2); g.setAttribute('y2',y2);
+    g.setAttribute('class','edge-glow');
+    board.appendChild(g);
   }
 
   // count filled sides of a box
@@ -280,6 +312,7 @@
     if (busy || turn!=='you') return;
     const owner = type==='h' ? hEdges[hKey(r,c)] : vEdges[vKey(r,c)];
     if (owner) return;
+    aiLastEdges = []; // human is drawing — clear the AI's last-turn highlight
     const completed = applyEdge(type,r,c,'you');
     render();
     updateScores();
@@ -414,6 +447,7 @@
     const move = aiChooseMove();
     if (!move){ finish(); return; }
     const completed = applyEdge(move.type,move.r,move.c,'ai');
+    aiLastEdges.push({type:move.type, r:move.r, c:move.c}); // highlight this turn's edges
     render();
     updateScores();
     if (claimed >= totalBoxes){ busy=false; finish(); return; }

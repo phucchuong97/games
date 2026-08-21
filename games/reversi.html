@@ -82,6 +82,18 @@
   .disc.show { transform: scale(1); }
   .disc.black { background: #1f2937; }
   .disc.white { background: #f5f5f5; }
+  /* Computer's most recent move highlight */
+  @keyframes aiPulse {
+    from { box-shadow: 0 0 0 3px #fbbf24, 0 0 8px 1px rgba(251,191,36,0.4); }
+    to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 16px 4px rgba(251,191,36,0.7); }
+  }
+  .disc.ai-last {
+    box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6);
+    animation: aiPulse 1.2s ease-in-out infinite alternate;
+  }
+  .disc.ai-flip {
+    box-shadow: 0 0 0 2px rgba(251,191,36,0.55);
+  }
   .hint {
     width: 16px; height: 16px;
     border-radius: 50%;
@@ -169,6 +181,8 @@
   ];
 
   let board, current, busy = false, gameOver = false;
+  // Track the computer's (AI) most recent move so it can be highlighted
+  let aiLastMove = null, aiFlipped = [];
 
   const boardEl = document.getElementById('board');
   const statusEl = document.getElementById('status');
@@ -244,6 +258,8 @@
       if (v !== 0){
         const d = document.createElement('div');
         d.className = 'disc ' + (v===BLACK ? 'black' : 'white') + ' show';
+        if (aiLastMove && aiLastMove.r === r && aiLastMove.c === c) d.classList.add('ai-last');
+        else if (aiFlipped.some(f => f[0] === r && f[1] === c)) d.classList.add('ai-flip');
         cell.appendChild(d);
       } else if (moveMap[r+'-'+c]){
         const h = document.createElement('div');
@@ -258,6 +274,14 @@
 
   function cellAt(r,c){
     return boardEl.children[r*8 + c];
+  }
+
+  // Clear the computer's last-move highlight (state + any live DOM classes)
+  function clearAiHighlight(){
+    aiLastMove = null;
+    aiFlipped = [];
+    boardEl.querySelectorAll('.disc.ai-last, .disc.ai-flip')
+      .forEach(d => d.classList.remove('ai-last', 'ai-flip'));
   }
 
   function updateScore(){
@@ -275,6 +299,7 @@
     cell.innerHTML = '';
     const d = document.createElement('div');
     d.className = 'disc ' + (player===BLACK?'black':'white');
+    if (player === AI) d.classList.add('ai-last');
     cell.appendChild(d);
     requestAnimationFrame(()=> d.classList.add('show'));
     board[r][c] = player;
@@ -290,6 +315,7 @@
       if (fd){
         fd.classList.remove('black','white');
         fd.classList.add(player===BLACK?'black':'white');
+        if (player === AI) fd.classList.add('ai-flip');
       }
       updateScore();
       setTimeout(flipNext, 55);
@@ -302,6 +328,7 @@
     if (busy || gameOver || current !== HUMAN) return;
     const flips = flipsFor(board, r, c, HUMAN);
     if (!flips.length) return;
+    clearAiHighlight();
     busy = true;
     statusEl.textContent = '';
     animateMove(r, c, HUMAN, flips, ()=>{
@@ -342,6 +369,8 @@
     if (!move){ current = HUMAN; nextTurn(); return; }
     busy = true;
     const flips = flipsFor(board, move.r, move.c, AI);
+    aiLastMove = { r: move.r, c: move.c };
+    aiFlipped = flips.map(([fr,fc]) => [fr, fc]);
     animateMove(move.r, move.c, AI, flips, ()=>{
       current = HUMAN;
       busy = false;
@@ -448,6 +477,8 @@
     current = HUMAN;
     busy = false;
     gameOver = false;
+    aiLastMove = null;
+    aiFlipped = [];
     document.getElementById('startOverlay').classList.add('hidden');
     document.getElementById('endOverlay').classList.add('hidden');
     nextTurn();

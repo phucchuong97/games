@@ -83,6 +83,16 @@
   .pit.selectable:hover { background: #d8f3df; }
   .pit.selected { background: #bbf7d0; box-shadow: inset 0 0 0 3px #16a34a; }
   .cell.active { background: #fde68a; }
+  /* gold highlight of the opponent's most recent move (its start pit) */
+  @keyframes lastOppMovePulse {
+    from { box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6); }
+    to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 20px 5px rgba(251,191,36,0.9); }
+  }
+  .cell.last-opp-move {
+    z-index: 4;
+    box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6);
+    animation: lastOppMovePulse 1.2s ease-in-out infinite alternate;
+  }
 
   .count {
     position: absolute;
@@ -355,6 +365,11 @@ function buildCitizens() {
 }
 buildCitizens();
 
+// Clear the gold highlight of the opponent's last move (its start pit).
+function clearOppHighlight() {
+  for (let i = 0; i < TOTAL; i++) if (cellEls[i]) cellEls[i].classList.remove("last-opp-move");
+}
+
 function render(opts = {}) {
   const selectable = opts.selectable || new Set();
   for (let i = 0; i < TOTAL; i++) {
@@ -510,6 +525,7 @@ function newGame() {
   selectedIndex = null;
   busy = false;
   undoSnap = null;
+  clearOppHighlight();
   refs.overlay.classList.remove("show");
   renderHistory();
   updatePanels();
@@ -551,6 +567,8 @@ function onCellClick(index) {
   const p = state.current;
   if (!PLAYER_PITS[p].includes(index)) return;
   if (state.cells[index].citizens === 0) return;
+  // Human is taking their next action — clear the opponent's last-move highlight.
+  clearOppHighlight();
   selectedIndex = index;
   setStatus(`Pit ${indexToPit(index)} selected — choose a direction.`);
   refreshSelectable();
@@ -574,6 +592,11 @@ async function chooseDirection(dir) {
   updateButtons();
 
   await playEvents(events, (ev) => flyCapture(ev.index, ev.points, refs.panel[player]));
+
+  // Highlight the pit this move picked up from, so the next player sees the
+  // opponent's most recent move. Cleared when they make their own selection.
+  clearOppHighlight();
+  if (cellEls[index]) cellEls[index].classList.add("last-opp-move");
 
   busy = false;
   updatePanels();
@@ -612,6 +635,7 @@ function undo() {
   undoSnap = null;
   selectedIndex = null;
   state.finished = false;
+  clearOppHighlight();
   refs.overlay.classList.remove("show");
   renderHistory();
   updatePanels();

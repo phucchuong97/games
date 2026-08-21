@@ -100,6 +100,16 @@ button.btn:hover { background: #22c55e; }
   box-shadow: 0 0 0 4px #fff, 0 0 16px 4px rgba(255,255,255,0.5);
 }
 
+/* Computer's most recent move highlight */
+@keyframes aiPulse {
+  from { box-shadow: 0 0 0 3px #fbbf24, 0 0 8px 1px rgba(251,191,36,0.4); }
+  to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 16px 4px rgba(251,191,36,0.7); }
+}
+.cell.ai-last {
+  box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6);
+  animation: aiPulse 1.2s ease-in-out infinite alternate;
+}
+
 /* Drop animation */
 @keyframes dropIn {
   from { transform: translateY(-400px); }
@@ -177,6 +187,7 @@ function newGame() {
   aiThinking = false;
   hoverCol = -1;
   renderBoard();
+  clearAiHighlight();
   updateTurnIndicator('your');
   clearHover();
 }
@@ -210,6 +221,10 @@ function updateTurnIndicator(whose) {
 
 function clearHover() {
   document.querySelectorAll('.hover-cell').forEach(h => h.classList.remove('active'));
+}
+
+function clearAiHighlight() {
+  document.querySelectorAll('#board .cell.ai-last').forEach(c => c.classList.remove('ai-last'));
 }
 
 // Hover events
@@ -258,6 +273,7 @@ document.getElementById('hover-row').addEventListener('click', e => {
 function playerDrop(col) {
   const row = dropRow(grid, col);
   if (row === -1) return;
+  clearAiHighlight();
   grid[row][col] = 1;
   animateDrop(row, col, 'p1');
   const win = checkWin(grid, row, col, 1);
@@ -287,6 +303,9 @@ function aiTurn() {
   const row = dropRow(grid, col);
   grid[row][col] = 2;
   animateDrop(row, col, 'p2');
+  clearAiHighlight();
+  const aiCell = getCell(row, col);
+  if (aiCell) aiCell.classList.add('ai-last');
   const win = checkWin(grid, row, col, 2);
   if (win) {
     highlightWin(win);

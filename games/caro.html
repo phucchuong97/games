@@ -123,9 +123,47 @@
   let gameOver;
   let started;          // false until the player clicks Start
   let winLine;          // [{r,c}, ...] of winning cells, or null
+  let lastAiMove;       // {r,c} of the computer's most recent move, or null
+  let highlightRAF = null; // requestAnimationFrame id for the pulse loop
 
   const HUMAN = "X";
   const AI = "O";
+
+  // Redraw continuously so the computer's last-move ring gently pulses.
+  // The loop stops on its own once there is nothing to highlight.
+  function startHighlightPulse() {
+    if (highlightRAF !== null) return;
+    const loop = () => {
+      if (!lastAiMove || gameOver) { highlightRAF = null; return; }
+      draw();
+      highlightRAF = requestAnimationFrame(loop);
+    };
+    highlightRAF = requestAnimationFrame(loop);
+  }
+
+  function stopHighlightPulse() {
+    if (highlightRAF !== null) {
+      cancelAnimationFrame(highlightRAF);
+      highlightRAF = null;
+    }
+  }
+
+  // Bright gold ring with a soft, pulsing glow around the computer's last stone.
+  function drawLastAiRing() {
+    if (!lastAiMove) return;
+    const x = PAD + lastAiMove.c * CELL, y = PAD + lastAiMove.r * CELL;
+    // ~1.6s pulse; frozen (static ring) once the game is over.
+    const pulse = gameOver ? 0.5 : 0.5 + 0.5 * Math.sin(performance.now() * 2 * Math.PI / 1600);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.46, 0, Math.PI * 2);
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 3;
+    ctx.shadowColor = "rgba(251,191,36,0.85)";
+    ctx.shadowBlur = 6 + pulse * 12;
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function init() {
     N = Number(sizeEl.value);
@@ -134,6 +172,8 @@
     gameOver = false;
     started = false;
     winLine = null;
+    stopHighlightPulse();
+    lastAiMove = null;
 
     canvas.width = (N - 1) * CELL + PAD * 2;
     canvas.height = (N - 1) * CELL + PAD * 2;
@@ -188,6 +228,9 @@
       ctx.lineTo(PAD + b.c * CELL, PAD + b.r * CELL);
       ctx.stroke();
     }
+
+    // highlight the computer's most recent move
+    drawLastAiRing();
   }
 
   function drawStone(r, c, player) {
@@ -210,6 +253,10 @@
     const r = Math.round((e.clientY - rect.top - PAD) / CELL);
     if (r < 0 || r >= N || c < 0 || c >= N) return;
     if (board[r][c]) return;
+
+    // human is moving — drop the computer's last-move marker
+    stopHighlightPulse();
+    lastAiMove = null;
 
     place(r, c, current);
 
@@ -275,7 +322,9 @@
     if (gameOver) return;
     const move = bestMove();
     if (!move) return;
+    lastAiMove = { r: move.r, c: move.c }; // mark before drawing so the ring appears
     place(move.r, move.c, AI);
+    startHighlightPulse();
     if (!gameOver) {
       current = HUMAN;
       updateStatus();

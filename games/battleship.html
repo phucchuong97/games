@@ -48,6 +48,16 @@
   .cell.sunk { background: #b91c1c; }
   .cell.preview-ok { background: #22c55e; }
   .cell.preview-bad { background: #7f1d1d; }
+  @keyframes lastEnemyShotPulse {
+    from { box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6); }
+    to   { box-shadow: 0 0 0 3px #fbbf24, 0 0 20px 5px rgba(251,191,36,0.9); }
+  }
+  .cell.last-enemy-shot {
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 0 0 3px #fbbf24, 0 0 12px 2px rgba(251,191,36,0.6);
+    animation: lastEnemyShotPulse 1.2s ease-in-out infinite alternate;
+  }
   .panel {
     background: #16213e;
     border: 1px solid #0f3460;
@@ -199,6 +209,11 @@
 
   function cellAt(el, r, c){
     return el.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
+  }
+
+  // Gold highlight for the enemy's most recent shot on the player's own fleet grid.
+  function clearEnemyShotHighlight(){
+    playerGridEl.querySelectorAll('.last-enemy-shot').forEach(el=>el.classList.remove('last-enemy-shot'));
   }
 
   function init(){
@@ -364,6 +379,8 @@
   function playerFire(r,c){
     if (phase!=='play') return;
     if (playerShots[r][c]) return;
+    // Human is taking their next action — clear the enemy's last-shot highlight.
+    clearEnemyShotHighlight();
     playerShots[r][c] = true;
     const cell = cellAt(enemyGridEl, r, c);
     cell.classList.remove('fireable');
@@ -432,6 +449,9 @@
     const {r,c} = target;
     enemyShots[r][c] = true;
     const cell = cellAt(playerGridEl, r, c);
+    // Highlight the cell the enemy just fired at (its latest shot).
+    clearEnemyShotHighlight();
+    cell.classList.add('last-enemy-shot');
     const shipIdx = playerBoard[r][c];
     if (shipIdx !== null){
       cell.classList.remove('ship');
