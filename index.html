@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mini Games</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -19,13 +20,19 @@
     gap: 32px;
     padding: 24px;
   }
-  h1 {
-    margin: 0;
-    font-size: clamp(28px, 6vw, 48px);
-    letter-spacing: 3px;
-    color: #4ade80;
+  .search {
+    width: min(420px, 90vw);
+    padding: 12px 16px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 2px solid #0f3460;
+    background: #16213e;
+    color: #e0e0e0;
+    outline: none;
+    transition: border-color 0.15s;
   }
-  p.sub { margin: 0; color: #94a3b8; }
+  .search:focus { border-color: #4ade80; }
+  .search::placeholder { color: #64748b; }
   .cards {
     display: flex;
     flex-wrap: wrap;
@@ -54,204 +61,225 @@
   .card .emoji { font-size: 64px; line-height: 1; }
   .card .name { font-size: 22px; font-weight: bold; letter-spacing: 1px; }
   .card .desc { font-size: 13px; color: #94a3b8; }
+  .no-results { color: #94a3b8; font-size: 15px; }
   footer { font-size: 12px; color: #64748b; }
 </style>
 </head>
 <body>
-  <h1>MINI GAMES</h1>
-  <p class="sub">Pick a game to play</p>
-  <div class="cards">
-    <a class="card" href="games/snake.html">
-      <span class="emoji">🐍</span>
-      <span class="name">Snake</span>
-      <span class="desc">Classic arcade snake</span>
-    </a>
-    <a class="card" href="games/caro.html">
-      <span class="emoji">⭕</span>
-      <span class="name">Caro</span>
-      <span class="desc">Five-in-a-row vs computer</span>
-    </a>
+  <input type="search" id="search" class="search" placeholder="Search games…" autocomplete="off" aria-label="Search games by name">
+  <div class="cards" id="cards">
     <a class="card" href="games/2048.html">
       <span class="emoji">🔢</span>
       <span class="name">2048</span>
-      <span class="desc">Slide & merge tiles</span>
-    </a>
-    <a class="card" href="games/breakout.html">
-      <span class="emoji">🧱</span>
-      <span class="name">Breakout</span>
-      <span class="desc">Smash all the bricks</span>
-    </a>
-    <a class="card" href="games/tictactoe.html">
-      <span class="emoji">⨯</span>
-      <span class="name">Tic-Tac-Toe</span>
-      <span class="desc">Three-in-a-row vs computer</span>
-    </a>
-    <a class="card" href="games/oanquan.html">
-      <span class="emoji">🪨</span>
-      <span class="name">Ô Ăn Quan</span>
-      <span class="desc">Vietnamese mandarin square</span>
-    </a>
-    <a class="card" href="games/minesweeper.html">
-      <span class="emoji">💣</span>
-      <span class="name">Minesweeper</span>
-      <span class="desc">Clear the minefield</span>
-    </a>
-    <a class="card" href="games/sliding.html">
-      <span class="emoji">🔀</span>
-      <span class="name">Sliding Puzzle</span>
-      <span class="desc">Slide tiles into order</span>
-    </a>
-    <a class="card" href="games/nonogram.html">
-      <span class="emoji">🟩</span>
-      <span class="name">Nonogram</span>
-      <span class="desc">Logic grid puzzle</span>
-    </a>
-    <a class="card" href="games/flappy.html">
-      <span class="emoji">🐦</span>
-      <span class="name">Flappy Bird</span>
-      <span class="desc">Tap to fly through pipes</span>
+      <span class="desc">Slide &amp; merge tiles</span>
     </a>
     <a class="card" href="games/asteroids.html">
       <span class="emoji">🚀</span>
       <span class="name">Asteroids</span>
       <span class="desc">Shoot the asteroids</span>
     </a>
-    <a class="card" href="games/pong.html">
-      <span class="emoji">🏓</span>
-      <span class="name">Pong</span>
-      <span class="desc">Classic two-player paddle</span>
-    </a>
-    <a class="card" href="games/solitaire.html">
-      <span class="emoji">🃏</span>
-      <span class="name">Solitaire</span>
-      <span class="desc">Klondike card patience</span>
-    </a>
-    <a class="card" href="games/memory.html">
-      <span class="emoji">🧠</span>
-      <span class="name">Memory</span>
-      <span class="desc">Match the card pairs</span>
+    <a class="card" href="games/battleship.html">
+      <span class="emoji">🚢</span>
+      <span class="name">Battleship</span>
+      <span class="desc">Sink the enemy fleet</span>
     </a>
     <a class="card" href="games/blackjack.html">
       <span class="emoji">🎴</span>
       <span class="name">Blackjack</span>
       <span class="desc">Beat the dealer to 21</span>
     </a>
-    <a class="card" href="games/wordle.html">
-      <span class="emoji">🔤</span>
-      <span class="name">Wordle</span>
-      <span class="desc">Guess the 5-letter word</span>
-    </a>
-    <a class="card" href="games/sudoku.html">
-      <span class="emoji">🧩</span>
-      <span class="name">Sudoku</span>
-      <span class="desc">Fill the 9×9 grid</span>
-    </a>
-    <a class="card" href="games/poker.html">
-      <span class="emoji">♠</span>
-      <span class="name">Poker</span>
-      <span class="desc">5-Card Draw vs dealer</span>
-    </a>
-    <a class="card" href="games/yahtzee.html">
-      <span class="emoji">🎲</span>
-      <span class="name">Yahtzee</span>
-      <span class="desc">Roll for the best combos</span>
-    </a>
-    <a class="card" href="games/war.html">
-      <span class="emoji">⚔</span>
-      <span class="name">War</span>
-      <span class="desc">Classic card battle game</span>
-    </a>
-    <a class="card" href="games/hangman.html">
-      <span class="emoji">🪢</span>
-      <span class="name">Hangman</span>
-      <span class="desc">Guess the hidden word</span>
-    </a>
     <a class="card" href="games/boggle.html">
       <span class="emoji">🔡</span>
       <span class="name">Boggle</span>
       <span class="desc">Find words in the grid</span>
     </a>
-    <a class="card" href="games/connectfour.html">
-      <span class="emoji">🟡</span>
-      <span class="name">Connect Four</span>
-      <span class="desc">Drop discs, beat the AI</span>
+    <a class="card" href="games/breakout.html">
+      <span class="emoji">🧱</span>
+      <span class="name">Breakout</span>
+      <span class="desc">Smash all the bricks</span>
     </a>
-    <a class="card" href="games/mahjong.html">
-      <span class="emoji">🀄</span>
-      <span class="name">Mahjong</span>
-      <span class="desc">Shanghai solitaire puzzle</span>
-    </a>
-    <a class="card" href="games/lightsout.html">
-      <span class="emoji">💡</span>
-      <span class="name">Lights Out</span>
-      <span class="desc">Toggle all lights off</span>
-    </a>
-    <a class="card" href="games/pacman.html">
-      <span class="emoji">👻</span>
-      <span class="name">Pac-Man</span>
-      <span class="desc">Eat dots, dodge ghosts</span>
-    </a>
-    <a class="card" href="games/spaceinvaders.html">
-      <span class="emoji">👾</span>
-      <span class="name">Space Invaders</span>
-      <span class="desc">Blast the alien invaders</span>
-    </a>
-    <a class="card" href="games/tetris.html">
-      <span class="emoji">🟦</span>
-      <span class="name">Tetris</span>
-      <span class="desc">Stack and clear lines</span>
-    </a>
-    <a class="card" href="games/reversi.html">
-      <span class="emoji">⚫</span>
-      <span class="name">Reversi</span>
-      <span class="desc">Flip discs vs computer</span>
+    <a class="card" href="games/caro.html">
+      <span class="emoji">⭕</span>
+      <span class="name">Caro</span>
+      <span class="desc">Five-in-a-row vs computer</span>
     </a>
     <a class="card" href="games/checkers.html">
       <span class="emoji">🔴</span>
       <span class="name">Checkers</span>
       <span class="desc">Jump and king vs AI</span>
     </a>
-    <a class="card" href="games/simon.html">
-      <span class="emoji">🎨</span>
-      <span class="name">Simon</span>
-      <span class="desc">Repeat the color sequence</span>
-    </a>
-    <a class="card" href="games/mastermind.html">
-      <span class="emoji">🎯</span>
-      <span class="name">Mastermind</span>
-      <span class="desc">Crack the secret code</span>
-    </a>
-    <a class="card" href="games/whackamole.html">
-      <span class="emoji">🐹</span>
-      <span class="name">Whack-a-Mole</span>
-      <span class="desc">Bop moles for points</span>
-    </a>
-    <a class="card" href="games/battleship.html">
-      <span class="emoji">🚢</span>
-      <span class="name">Battleship</span>
-      <span class="desc">Sink the enemy fleet</span>
+    <a class="card" href="games/connectfour.html">
+      <span class="emoji">🟡</span>
+      <span class="name">Connect Four</span>
+      <span class="desc">Drop discs, beat the AI</span>
     </a>
     <a class="card" href="games/dotsandboxes.html">
       <span class="emoji">🔷</span>
       <span class="name">Dots &amp; Boxes</span>
       <span class="desc">Claim boxes vs AI</span>
     </a>
-    <a class="card" href="games/match3.html">
-      <span class="emoji">💎</span>
-      <span class="name">Match-3</span>
-      <span class="desc">Swap gems, match three</span>
-    </a>
-    <a class="card" href="games/sokoban.html">
-      <span class="emoji">📦</span>
-      <span class="name">Sokoban</span>
-      <span class="desc">Push boxes onto goals</span>
+    <a class="card" href="games/flappy.html">
+      <span class="emoji">🐦</span>
+      <span class="name">Flappy Bird</span>
+      <span class="desc">Tap to fly through pipes</span>
     </a>
     <a class="card" href="games/floodit.html">
       <span class="emoji">🌈</span>
       <span class="name">Flood-It</span>
       <span class="desc">Flood the board one color</span>
     </a>
+    <a class="card" href="games/hangman.html">
+      <span class="emoji">🪢</span>
+      <span class="name">Hangman</span>
+      <span class="desc">Guess the hidden word</span>
+    </a>
+    <a class="card" href="games/lightsout.html">
+      <span class="emoji">💡</span>
+      <span class="name">Lights Out</span>
+      <span class="desc">Toggle all lights off</span>
+    </a>
+    <a class="card" href="games/mahjong.html">
+      <span class="emoji">🀄</span>
+      <span class="name">Mahjong</span>
+      <span class="desc">Shanghai solitaire puzzle</span>
+    </a>
+    <a class="card" href="games/mastermind.html">
+      <span class="emoji">🎯</span>
+      <span class="name">Mastermind</span>
+      <span class="desc">Crack the secret code</span>
+    </a>
+    <a class="card" href="games/match3.html">
+      <span class="emoji">💎</span>
+      <span class="name">Match-3</span>
+      <span class="desc">Swap gems, match three</span>
+    </a>
+    <a class="card" href="games/memory.html">
+      <span class="emoji">🧠</span>
+      <span class="name">Memory</span>
+      <span class="desc">Match the card pairs</span>
+    </a>
+    <a class="card" href="games/minesweeper.html">
+      <span class="emoji">💣</span>
+      <span class="name">Minesweeper</span>
+      <span class="desc">Clear the minefield</span>
+    </a>
+    <a class="card" href="games/nonogram.html">
+      <span class="emoji">🟩</span>
+      <span class="name">Nonogram</span>
+      <span class="desc">Logic grid puzzle</span>
+    </a>
+    <a class="card" href="games/oanquan.html">
+      <span class="emoji">🪨</span>
+      <span class="name">Ô Ăn Quan</span>
+      <span class="desc">Vietnamese mandarin square</span>
+    </a>
+    <a class="card" href="games/pacman.html">
+      <span class="emoji">👻</span>
+      <span class="name">Pac-Man</span>
+      <span class="desc">Eat dots, dodge ghosts</span>
+    </a>
+    <a class="card" href="games/poker.html">
+      <span class="emoji">♠</span>
+      <span class="name">Poker</span>
+      <span class="desc">5-Card Draw vs dealer</span>
+    </a>
+    <a class="card" href="games/pong.html">
+      <span class="emoji">🏓</span>
+      <span class="name">Pong</span>
+      <span class="desc">Classic two-player paddle</span>
+    </a>
+    <a class="card" href="games/reversi.html">
+      <span class="emoji">⚫</span>
+      <span class="name">Reversi</span>
+      <span class="desc">Flip discs vs computer</span>
+    </a>
+    <a class="card" href="games/simon.html">
+      <span class="emoji">🎨</span>
+      <span class="name">Simon</span>
+      <span class="desc">Repeat the color sequence</span>
+    </a>
+    <a class="card" href="games/sliding.html">
+      <span class="emoji">🔀</span>
+      <span class="name">Sliding Puzzle</span>
+      <span class="desc">Slide tiles into order</span>
+    </a>
+    <a class="card" href="games/snake.html">
+      <span class="emoji">🐍</span>
+      <span class="name">Snake</span>
+      <span class="desc">Classic arcade snake</span>
+    </a>
+    <a class="card" href="games/sokoban.html">
+      <span class="emoji">📦</span>
+      <span class="name">Sokoban</span>
+      <span class="desc">Push boxes onto goals</span>
+    </a>
+    <a class="card" href="games/solitaire.html">
+      <span class="emoji">🃏</span>
+      <span class="name">Solitaire</span>
+      <span class="desc">Klondike card patience</span>
+    </a>
+    <a class="card" href="games/spaceinvaders.html">
+      <span class="emoji">👾</span>
+      <span class="name">Space Invaders</span>
+      <span class="desc">Blast the alien invaders</span>
+    </a>
+    <a class="card" href="games/sudoku.html">
+      <span class="emoji">🧩</span>
+      <span class="name">Sudoku</span>
+      <span class="desc">Fill the 9×9 grid</span>
+    </a>
+    <a class="card" href="games/tetris.html">
+      <span class="emoji">🟦</span>
+      <span class="name">Tetris</span>
+      <span class="desc">Stack and clear lines</span>
+    </a>
+    <a class="card" href="games/tictactoe.html">
+      <span class="emoji">⨯</span>
+      <span class="name">Tic-Tac-Toe</span>
+      <span class="desc">Three-in-a-row vs computer</span>
+    </a>
+    <a class="card" href="games/war.html">
+      <span class="emoji">⚔</span>
+      <span class="name">War</span>
+      <span class="desc">Classic card battle game</span>
+    </a>
+    <a class="card" href="games/whackamole.html">
+      <span class="emoji">🐹</span>
+      <span class="name">Whack-a-Mole</span>
+      <span class="desc">Bop moles for points</span>
+    </a>
+    <a class="card" href="games/wordle.html">
+      <span class="emoji">🔤</span>
+      <span class="name">Wordle</span>
+      <span class="desc">Guess the 5-letter word</span>
+    </a>
+    <a class="card" href="games/yahtzee.html">
+      <span class="emoji">🎲</span>
+      <span class="name">Yahtzee</span>
+      <span class="desc">Roll for the best combos</span>
+    </a>
   </div>
+  <p class="no-results" id="no-results" style="display:none;">No games found.</p>
   <footer>Built with HTML, CSS &amp; JavaScript · no install needed</footer>
+
+<script>
+  const searchEl = document.getElementById("search");
+  const cardEls = Array.from(document.querySelectorAll(".card"));
+  const noResultsEl = document.getElementById("no-results");
+  // strip diacritics so "o an quan" matches "Ô Ăn Quan"
+  const norm = (s) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+
+  searchEl.addEventListener("input", () => {
+    const q = norm(searchEl.value);
+    let visible = 0;
+    for (const card of cardEls) {
+      const name = norm(card.querySelector(".name").textContent);
+      const match = name.includes(q);
+      card.style.display = match ? "" : "none";
+      if (match) visible++;
+    }
+    noResultsEl.style.display = visible ? "none" : "";
+  });
+</script>
 </body>
 </html>
