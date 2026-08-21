@@ -113,6 +113,27 @@
   .btn:active{transform:translateY(1px)}
   .hint{margin-top:10px;text-align:center;color:var(--muted);font-size:12px}
   .hint b{color:#cbd5e1;font-weight:600}
+  .touch-controls { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touch-controls { display: grid; }
+  }
+  .touch-controls {
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(3, 64px);
+    gap: 8px;
+    justify-content: center;
+    margin: 16px auto 0;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .touch-controls button {
+    width: 64px; height: 64px; font-size: 28px; line-height: 1;
+    background: #16213e; color: #e0e0e0;
+    border: 2px solid #0f3460; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+  }
+  .touch-controls button:active { background: #0f3460; border-color: #4ade80; }
 </style>
 
 <a href="../index.html" class="back">&larr; Back</a>
@@ -127,6 +148,12 @@
   <div class="stage">
     <canvas id="game" width="560" height="620"></canvas>
     <div class="overlay" id="overlay"></div>
+  </div>
+  <div class="touch-controls" id="dpad" aria-label="Direction controls">
+    <button type="button" id="btn-up"    style="grid-column:2;grid-row:1" aria-label="Move up">&#9650;</button>
+    <button type="button" id="btn-left"  style="grid-column:1;grid-row:2" aria-label="Move left">&#9664;</button>
+    <button type="button" id="btn-right" style="grid-column:3;grid-row:2" aria-label="Move right">&#9654;</button>
+    <button type="button" id="btn-down"  style="grid-column:2;grid-row:3" aria-label="Move down">&#9660;</button>
   </div>
   <div class="hint">Move with <b>Arrow keys</b> or <b>WASD</b> &middot; <b>Space</b> to pause</div>
 </div>
@@ -809,6 +836,12 @@ function pauseGame(){ state = 'paused'; showPaused(); }
 function resumeGame(){ hideOverlay(); state = 'playing'; }
 
 // ---------- Input ----------
+// Shared "desired direction" setter used by BOTH keyboard and touch controls.
+function setPacDir(dx, dy){
+  if (state === 'start' || state === 'gameover') return;
+  pac.next = { x: dx, y: dy };
+}
+
 window.addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
   var isMove = (k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright' ||
@@ -820,15 +853,51 @@ window.addEventListener('keydown', function(e){
     return;
   }
 
-  if (k === 'arrowup' || k === 'w') pac.next = { x:0, y:-1 };
-  else if (k === 'arrowdown' || k === 's') pac.next = { x:0, y:1 };
-  else if (k === 'arrowleft' || k === 'a') pac.next = { x:-1, y:0 };
-  else if (k === 'arrowright' || k === 'd') pac.next = { x:1, y:0 };
+  if (k === 'arrowup' || k === 'w') setPacDir(0, -1);
+  else if (k === 'arrowdown' || k === 's') setPacDir(0, 1);
+  else if (k === 'arrowleft' || k === 'a') setPacDir(-1, 0);
+  else if (k === 'arrowright' || k === 'd') setPacDir(1, 0);
   else if (k === ' '){
     if (state === 'playing') pauseGame();
     else if (state === 'paused') resumeGame();
   }
 });
+
+// ---------- Touch controls (D-pad + swipe) ----------
+// Both feed the SAME setPacDir() path the keyboard uses.
+function bindDir(el, dx, dy){
+  if (!el) return;
+  el.addEventListener('pointerdown', function(e){
+    e.preventDefault();      // no 300ms delay, no double-fire, no page scroll/zoom
+    setPacDir(dx, dy);
+  });
+}
+bindDir(document.getElementById('btn-up'),    0, -1);
+bindDir(document.getElementById('btn-down'),  0,  1);
+bindDir(document.getElementById('btn-left'),  -1, 0);
+bindDir(document.getElementById('btn-right'),  1, 0);
+
+// Swipe anywhere on the canvas (touch/pen only, so desktop mouse is unchanged).
+var swipeX = 0, swipeY = 0, swiping = false;
+var SWIPE_MIN = 24;
+cv.addEventListener('pointerdown', function(e){
+  if (e.pointerType === 'mouse') return;
+  e.preventDefault();
+  swiping = true;
+  swipeX = e.clientX;
+  swipeY = e.clientY;
+});
+cv.addEventListener('pointerup', function(e){
+  if (!swiping || e.pointerType === 'mouse') return;
+  swiping = false;
+  var dx = e.clientX - swipeX, dy = e.clientY - swipeY;
+  var adx = Math.abs(dx), ady = Math.abs(dy);
+  if (adx < SWIPE_MIN && ady < SWIPE_MIN) return; // treat as a tap, ignore
+  e.preventDefault();
+  if (adx >= ady) setPacDir(dx > 0 ? 1 : -1, 0);
+  else setPacDir(0, dy > 0 ? 1 : -1);
+});
+cv.addEventListener('pointercancel', function(){ swiping = false; });
 
 // ---------- Main loop (fixed timestep) ----------
 var last = performance.now(), accMs = 0;

@@ -55,7 +55,7 @@
     padding: 14px;
     margin: 12px;
   }
-  canvas { display: block; background: #16213e; border-radius: 6px; }
+  canvas { display: block; background: #16213e; border-radius: 6px; touch-action: none; }
   .hint { color: #94a3b8; font-size: 13px; margin: 6px; text-align: center; }
   .overlay {
     position: fixed;
@@ -73,6 +73,27 @@
   .overlay h2 { color: #4ade80; font-size: 32px; margin: 0; }
   .overlay p { color: #94a3b8; margin: 0; font-size: 16px; max-width: 420px; }
   .hidden { display: none; }
+  .touch-controls { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touch-controls { display: grid; }
+  }
+  .touch-controls {
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(3, 64px);
+    gap: 8px; justify-content: center; margin: 16px auto 0;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  .touch-controls button {
+    width: 64px; height: 64px; font-size: 28px; line-height: 1;
+    background: #16213e; color: #e0e0e0; border: 2px solid #0f3460; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+  }
+  .touch-controls button:active { background: #0f3460; border-color: #4ade80; }
+  #tcUp { grid-column: 2; grid-row: 1; }
+  #tcLeft { grid-column: 1; grid-row: 2; }
+  #tcRight { grid-column: 3; grid-row: 2; }
+  #tcDown { grid-column: 2; grid-row: 3; }
 </style>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 </head>
@@ -92,7 +113,13 @@
   <button id="undoBtn">Undo (U)</button>
   <button id="restartBtn">Restart (R)</button>
 </div>
-<div class="hint">Move: Arrow keys / WASD · Push a box onto every goal ring.</div>
+<div class="touch-controls" id="touchControls">
+  <button id="tcUp" aria-label="Up">▲</button>
+  <button id="tcLeft" aria-label="Left">◀</button>
+  <button id="tcRight" aria-label="Right">▶</button>
+  <button id="tcDown" aria-label="Down">▼</button>
+</div>
+<div class="hint">Move: Arrow keys / WASD · Swipe or tap the pad on touch · Push a box onto every goal ring.</div>
 
 <div class="overlay" id="startOverlay">
   <h2>Sokoban</h2>
@@ -356,6 +383,32 @@ document.getElementById('nextBtn').addEventListener('click', ()=>{
   const next = (level+1) % LEVELS.length;
   startLevel(next);
 });
+
+// touch controls: D-pad buttons feed the SAME move(dr,dc) the keyboard uses
+function bindMove(el, dr, dc){
+  el.addEventListener('pointerdown', (e)=>{ e.preventDefault(); move(dr, dc); });
+}
+bindMove(document.getElementById('tcUp'),   -1, 0);
+bindMove(document.getElementById('tcDown'),  1, 0);
+bindMove(document.getElementById('tcLeft'),  0, -1);
+bindMove(document.getElementById('tcRight'), 0, 1);
+
+// swipe gestures on the board (canvas) -> one move in that direction
+let swipeStart = null;
+cv.addEventListener('pointerdown', (e)=>{ e.preventDefault(); swipeStart = {x:e.clientX, y:e.clientY}; });
+cv.addEventListener('pointerup', (e)=>{
+  if(!swipeStart) return;
+  e.preventDefault();
+  const dx = e.clientX - swipeStart.x;
+  const dy = e.clientY - swipeStart.y;
+  swipeStart = null;
+  if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 24){
+    move(0, dx > 0 ? 1 : -1);
+  } else if(Math.abs(dy) > 24){
+    move(dy > 0 ? 1 : -1, 0);
+  }
+});
+cv.addEventListener('pointercancel', ()=>{ swipeStart = null; });
 
 // level selector
 const sel = document.getElementById('levelSel');

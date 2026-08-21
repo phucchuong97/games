@@ -24,13 +24,38 @@
   #start-btn { background: #4ade80; color: #16213e; font-weight: bold; font-size: 16px; padding: 12px 32px; border: none; border-radius: 6px; cursor: pointer; }
   #start-btn:hover { background: #22c55e; }
   #overlay .score-display { font-size: 22px; color: #e0e0e0; margin-bottom: 4px; }
+  #play-col { display: flex; flex-direction: column; align-items: center; }
+  .touch-controls { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touch-controls { display: flex; }
+  }
+  .touch-controls {
+    flex-wrap: wrap; gap: 10px; justify-content: center; margin: 16px auto 0;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  .touch-controls button {
+    width: 60px; height: 60px; font-size: 26px; line-height: 1;
+    background: #16213e; color: #e0e0e0; border: 2px solid #0f3460; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+  }
+  .touch-controls button:active { background: #0f3460; border-color: #4ade80; }
 </style>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 </head>
 <body>
 <a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
 <div id="game-wrapper">
-  <canvas id="board" width="300" height="600"></canvas>
+  <div id="play-col">
+    <canvas id="board" width="300" height="600"></canvas>
+    <div class="touch-controls">
+      <button id="tc-left" aria-label="Move left">◀</button>
+      <button id="tc-rotate" aria-label="Rotate">⟳</button>
+      <button id="tc-right" aria-label="Move right">▶</button>
+      <button id="tc-down" aria-label="Soft drop">▼</button>
+      <button id="tc-drop" aria-label="Hard drop">⤓</button>
+    </div>
+  </div>
   <div id="sidebar">
     <div class="panel">
       <h3>Score</h3>
@@ -295,32 +320,43 @@ function endGame() {
 
 document.getElementById('start-btn').addEventListener('click', startGame);
 
+// --- Piece actions (shared by keyboard and on-screen touch controls) ---
+function moveLeft() {
+  if (valid(currentPiece, -1, 0)) { currentPiece.x--; resetLock(); }
+}
+function moveRight() {
+  if (valid(currentPiece, 1, 0)) { currentPiece.x++; resetLock(); }
+}
+function softDrop() {
+  if (valid(currentPiece, 0, 1)) { currentPiece.y++; score++; scheduleDrops(); }
+}
+function rotatePiece() {
+  const rot = rotate(currentPiece.matrix);
+  // Wall kick attempts
+  for (const dx of [0,-1,1,-2,2]) {
+    if (valid(currentPiece, dx, 0, rot)) {
+      currentPiece.matrix = rot; currentPiece.x += dx; resetLock(); break;
+    }
+  }
+}
+function hardDrop() {
+  const dy = ghostY() - currentPiece.y;
+  currentPiece.y = ghostY();
+  score += dy * 2;
+  clearTimeout(lockTO);
+  place(currentPiece);
+}
+
 document.addEventListener('keydown', e => {
   if (!gameRunning) return;
   switch(e.code) {
-    case 'ArrowLeft':
-      if (valid(currentPiece, -1, 0)) { currentPiece.x--; resetLock(); } break;
-    case 'ArrowRight':
-      if (valid(currentPiece, 1, 0)) { currentPiece.x++; resetLock(); } break;
-    case 'ArrowDown':
-      if (valid(currentPiece, 0, 1)) { currentPiece.y++; score++; scheduleDrops(); } break;
-    case 'ArrowUp': {
-      const rot = rotate(currentPiece.matrix);
-      // Wall kick attempts
-      for (const dx of [0,-1,1,-2,2]) {
-        if (valid(currentPiece, dx, 0, rot)) {
-          currentPiece.matrix = rot; currentPiece.x += dx; resetLock(); break;
-        }
-      }
-      break;
-    }
+    case 'ArrowLeft': moveLeft(); break;
+    case 'ArrowRight': moveRight(); break;
+    case 'ArrowDown': softDrop(); break;
+    case 'ArrowUp': rotatePiece(); break;
     case 'Space': {
       e.preventDefault();
-      const dy = ghostY() - currentPiece.y;
-      currentPiece.y = ghostY();
-      score += dy * 2;
-      clearTimeout(lockTO);
-      place(currentPiece);
+      hardDrop();
       break;
     }
     case 'KeyC': {
@@ -345,6 +381,26 @@ document.addEventListener('keydown', e => {
   }
   draw();
 });
+
+// --- On-screen touch controls ---
+function bindRepeat(el, fn) {
+  let t = null;
+  const start = (e) => { e.preventDefault(); fn(); t = setInterval(fn, 120); };
+  const stop = (e) => { if (e) e.preventDefault(); if (t) { clearInterval(t); t = null; } };
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', stop);
+  el.addEventListener('pointerleave', stop);
+  el.addEventListener('pointercancel', stop);
+}
+function bindTap(el, fn) {
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
+}
+const run = (fn) => () => { if (!gameRunning) return; fn(); draw(); };
+bindRepeat(document.getElementById('tc-left'), run(moveLeft));
+bindRepeat(document.getElementById('tc-right'), run(moveRight));
+bindRepeat(document.getElementById('tc-down'), run(softDrop));
+bindTap(document.getElementById('tc-rotate'), run(rotatePiece));
+bindTap(document.getElementById('tc-drop'), run(hardDrop));
 </script>
 </body>
 </html>

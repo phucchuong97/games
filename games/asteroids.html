@@ -20,6 +20,23 @@ button {
   border-radius: 6px; padding: 10px 24px; font-size: 16px; cursor: pointer;
 }
 button:hover { background: #22c55e; }
+.touch-controls { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .touch-controls { display: flex; }
+}
+.touch-controls {
+  gap: 14px; justify-content: space-between; align-items: center;
+  width: min(100%, 460px); margin: 16px auto 0;
+  user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.touch-controls .group { display: flex; gap: 10px; }
+.touch-controls button {
+  width: 64px; height: 64px; font-size: 26px; line-height: 1;
+  background: #16213e; color: #e0e0e0; border: 2px solid #0f3460; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+}
+.touch-controls button:active { background: #0f3460; border-color: #4ade80; }
 </style>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 </head>
@@ -28,6 +45,16 @@ button:hover { background: #22c55e; }
 <h1>ASTEROIDS</h1>
 <canvas id="c" width="800" height="550"></canvas>
 <div id="hint">W/↑ Thrust · A/D/←/→ Rotate · Space Shoot · P Pause</div>
+<div class="touch-controls">
+  <div class="group">
+    <button id="btnLeft" aria-label="Rotate left">↺</button>
+    <button id="btnRight" aria-label="Rotate right">↻</button>
+    <button id="btnThrust" aria-label="Thrust">🚀</button>
+  </div>
+  <div class="group">
+    <button id="btnFire" aria-label="Fire">🔥</button>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById('c');
@@ -39,7 +66,7 @@ document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyP' && state === 'playing') paused = !paused;
-  if (e.code === 'Space' && state === 'over') startGame();
+  if (e.code === 'Space' && state !== 'playing') startGame();
 });
 document.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -269,7 +296,7 @@ function draw() {
     ctx.fillText('Score: ' + score + '  |  Wave: ' + wave, W/2, H/2 + 14);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '16px "Segoe UI"';
-    ctx.fillText('Press Space to play again', W/2, H/2 + 54);
+    ctx.fillText('Press Space or tap to play again', W/2, H/2 + 54);
     ctx.textAlign = 'left';
   }
 
@@ -280,7 +307,7 @@ function draw() {
     ctx.fillText('ASTEROIDS', W/2, H/2 - 30);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '16px "Segoe UI"';
-    ctx.fillText('Press Space to start', W/2, H/2 + 20);
+    ctx.fillText('Press Space or tap to start', W/2, H/2 + 20);
     ctx.textAlign = 'left';
   }
 }
@@ -290,6 +317,25 @@ function loop() {
   draw();
   requestAnimationFrame(loop);
 }
+
+// Touch controls: hook the same `keys` map the keyboard/game loop uses.
+// Fire is polled with a cooldown (auto-repeats while held), so all four are hold buttons.
+function bindHold(el, code) {
+  const set = (v) => (e) => { e.preventDefault(); keys[code] = v; };
+  el.addEventListener('pointerdown', set(true));
+  el.addEventListener('pointerup', set(false));
+  el.addEventListener('pointerleave', set(false));
+  el.addEventListener('pointercancel', set(false));
+}
+bindHold(document.getElementById('btnLeft'), 'ArrowLeft');
+bindHold(document.getElementById('btnRight'), 'ArrowRight');
+bindHold(document.getElementById('btnThrust'), 'ArrowUp');
+bindHold(document.getElementById('btnFire'), 'Space');
+
+// Tap the canvas to start / restart (touch devices have no keyboard).
+canvas.addEventListener('pointerdown', (e) => {
+  if (state !== 'playing') { e.preventDefault(); startGame(); }
+});
 
 state = 'idle';
 paused = false;

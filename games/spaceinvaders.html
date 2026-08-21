@@ -15,12 +15,38 @@
   .score-display { font-size: 22px; color: #e0e0e0; }
   #start-btn { background: #4ade80; color: #16213e; font-weight: bold; font-size: 16px; padding: 12px 32px; border: none; border-radius: 6px; cursor: pointer; margin-top: 10px; }
   #start-btn:hover { background: #22c55e; }
+  .touch-controls { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touch-controls { display: flex; }
+  }
+  .touch-controls {
+    gap: 14px; justify-content: space-between; align-items: center;
+    width: min(100%, 420px); margin: 16px auto 0;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  .touch-controls .group { display: flex; gap: 10px; }
+  .touch-controls button {
+    width: 64px; height: 64px; font-size: 26px; line-height: 1;
+    background: #16213e; color: #e0e0e0; border: 2px solid #0f3460; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+  }
+  .touch-controls button:active { background: #0f3460; border-color: #4ade80; }
 </style>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 </head>
 <body>
 <a href="../index.html" style="position:fixed;top:12px;left:12px;color:#94a3b8;text-decoration:none;font-size:13px;">← Back</a>
 <canvas id="c" width="600" height="500"></canvas>
+<div class="touch-controls">
+  <div class="group">
+    <button id="btn-left" aria-label="Move left">◀</button>
+    <button id="btn-right" aria-label="Move right">▶</button>
+  </div>
+  <div class="group">
+    <button id="btn-fire" aria-label="Fire">🔫</button>
+  </div>
+</div>
 <div id="overlay">
   <h1>SPACE INVADERS</h1>
   <p>Destroy all aliens before they reach you!</p>
@@ -395,6 +421,18 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Touch controls: hook into the SAME keys map the game loop polls.
+function bindHold(el, code) {
+  const set = (v) => (e) => { e.preventDefault(); keys[code] = v; };
+  el.addEventListener('pointerdown', set(true));
+  el.addEventListener('pointerup', set(false));
+  el.addEventListener('pointerleave', set(false));
+  el.addEventListener('pointercancel', set(false));
+}
+bindHold(document.getElementById('btn-left'), 'ArrowLeft');
+bindHold(document.getElementById('btn-right'), 'ArrowRight');
+bindHold(document.getElementById('btn-fire'), 'Space');
 </script>
 </body>
 </html>

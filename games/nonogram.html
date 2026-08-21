@@ -96,6 +96,8 @@ td { padding: 0; }
   cursor: pointer;
   transition: background 0.05s;
   position: relative;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .grid-cell.filled { background: #4ade80; }
 .grid-cell.marked::after {
@@ -125,6 +127,11 @@ td { padding: 0; }
 }
 #win-msg.show { display: flex; }
 #win-msg h2 { margin: 0; color: #4ade80; }
+/* Mode toggle is only needed on touch devices (no right-click to mark). */
+.touch-only { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .touch-only { display: inline-block; }
+}
 </style>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 </head>
@@ -140,6 +147,7 @@ td { padding: 0; }
   <button id="new-btn">New Puzzle</button>
   <button id="reset-btn" class="secondary">Reset</button>
   <button id="check-btn" class="secondary">Check</button>
+  <button id="mode-btn" class="secondary touch-only" aria-label="Toggle fill or mark mode">✏️ Fill</button>
 </div>
 <div class="info-row">
   <span>Time: <b id="timer">0:00</b></span>
@@ -201,6 +209,7 @@ let timerInterval = null;
 let seconds = 0;
 let solved = false;
 let dragState = null; // {action: 'fill'|'mark'|'clear', startState}
+let touchMode = 'fill'; // touch devices: 'fill' paints cells, 'mark' places × marks
 
 function getClues(grid, isRow) {
   const size = isRow ? grid.length : grid[0].length;
@@ -344,6 +353,11 @@ function renderPuzzle() {
 
   table.addEventListener('mouseup', () => { dragState = null; });
   document.addEventListener('mouseup', () => { dragState = null; }, {once:true});
+  // Touch support: mouse events never fire on touch, so paint via touch + elementFromPoint.
+  table.addEventListener('touchstart', onTableTouchStart, { passive: false });
+  table.addEventListener('touchmove', onTableTouchMove, { passive: false });
+  table.addEventListener('touchend', () => { dragState = null; });
+  table.addEventListener('touchcancel', () => { dragState = null; });
   wrap.appendChild(table);
   updateClueHighlights();
 }
@@ -391,6 +405,54 @@ function applyAction(r, c, action) {
   if (td) applyCell(td, board[r][c]);
   updateClueHighlights();
   checkWin();
+}
+
+// Set a cell to marked (×) or clear it — mirrors the right-click behavior for touch.
+function applyMark(r, c, action) {
+  const want = action === 'mark' ? 2 : 0;
+  if (board[r][c] === want) return;
+  board[r][c] = want;
+  const td = document.querySelector(`.grid-cell[data-r="${r}"][data-c="${c}"]`);
+  if (td) applyCell(td, board[r][c]);
+  updateClueHighlights();
+}
+
+function nonoCellFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (el && el.classList && el.classList.contains('grid-cell')) {
+    return { r: +el.dataset.r, c: +el.dataset.c };
+  }
+  return null;
+}
+
+function onTableTouchStart(e) {
+  if (solved) return;
+  const t = e.touches[0];
+  if (!t) return;
+  const cell = nonoCellFromPoint(t.clientX, t.clientY);
+  if (!cell) return; // touched a clue/gap — leave default (allow scrolling)
+  e.preventDefault(); // painting a cell: block scroll + synthesized mouse events
+  const { r, c } = cell;
+  if (touchMode === 'mark') {
+    const action = board[r][c] === 2 ? 'unmark' : 'mark';
+    dragState = { action, mark: true };
+    applyMark(r, c, action);
+  } else {
+    const action = board[r][c] === 0 ? 'fill' : 'clear';
+    dragState = { action };
+    applyAction(r, c, action);
+  }
+}
+
+function onTableTouchMove(e) {
+  if (!dragState) return;
+  const t = e.touches[0];
+  if (!t) return;
+  const cell = nonoCellFromPoint(t.clientX, t.clientY);
+  if (!cell) return;
+  e.preventDefault();
+  if (dragState.mark) applyMark(cell.r, cell.c, dragState.action);
+  else applyAction(cell.r, cell.c, dragState.action);
 }
 
 function updateClueHighlights() {
@@ -449,6 +511,10 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   renderPuzzle();
 });
 document.getElementById('check-btn').addEventListener('click', doCheck);
+document.getElementById('mode-btn').addEventListener('click', () => {
+  touchMode = touchMode === 'fill' ? 'mark' : 'fill';
+  document.getElementById('mode-btn').textContent = touchMode === 'fill' ? '✏️ Fill' : '✕ Mark';
+});
 document.getElementById('size-select').addEventListener('change', e => {
   currentPuzzleIdx = 0;
   loadPuzzle(e.target.value, 0);
